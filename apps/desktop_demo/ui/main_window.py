@@ -15,6 +15,7 @@ from desktop_demo.ui.overlay import GazeOverlay
 from pupil_tracker import get_logger
 from pupil_tracker.camera import CameraError, OpenCVCamera
 from pupil_tracker.telemetry import JsonlLogger
+from pupil_tracker.tracking import Frame
 
 _LOGGER = get_logger("desktop_demo.ui")
 
@@ -25,6 +26,8 @@ class CameraSource(Protocol):
     def open(self) -> None: ...
 
     def close(self) -> None: ...
+
+    def read(self) -> Frame: ...
 
 
 class CameraPreviewWorker(QObject):
@@ -64,6 +67,17 @@ class CameraPreviewWorker(QObject):
         self.running = False
         _LOGGER.info("camera preview stopped")
         self.stopped.emit()
+
+    def tick(self) -> Frame | None:
+        """Read one frame when the preview worker is running."""
+
+        if not self.running or self._camera is None:
+            return None
+        try:
+            return self._camera.read()
+        except CameraError:
+            self.stop()
+            raise
 
 
 class MainWindow(QMainWindow):
