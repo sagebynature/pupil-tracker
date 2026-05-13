@@ -80,7 +80,17 @@ If this variable is missing or points to a non-existent file, camera preview can
 make run-demo
 ```
 
-The demo launches the PySide6 desktop shell. It does not start the camera on import; camera use should happen only after explicit user interaction.
+The demo launches the PySide6 desktop shell. It does not start the camera on import; camera use happens only after explicit user interaction.
+
+Expected manual path:
+
+1. Click Start Camera and confirm live preview.
+2. Center your face and confirm tracker annotations appear.
+3. Click Start Calibration and follow the 9 visible targets.
+4. Confirm calibration completes with fit metrics.
+5. Move gaze around the screen and confirm overlay, 3x3 region, and window-candidate debug text update plausibly.
+6. If logging is enabled, confirm JSONL telemetry contains scalar events only and no frame/image payloads.
+7. Stop Camera or close the app and confirm camera/tracker/overlay/log resources are released.
 
 Manual live testing should follow `docs/manual-test-checklist.md`.
 
@@ -103,7 +113,7 @@ Any future video/frame capture feature must be explicit opt-in and documented se
 - The demo is macOS-first and developer-oriented; Windows/Linux packaging is out of scope for the MVP.
 - Multi-monitor behavior is not fully specified.
 - The MediaPipe backend uses the installed MediaPipe Tasks API; real inference requires an appropriate FaceLandmarker model asset path.
-- The current UI is an MVP shell; full runtime wiring from camera to calibrated overlay is still a follow-on integration/polish area.
+- Live GUI/hardware behavior still needs manual validation on each target Mac.
 - The app enumerates and scores visible windows for debug purposes only and does not change focus.
 
 ## Repository Layout
