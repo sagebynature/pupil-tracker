@@ -67,6 +67,15 @@ git diff --check
 
 ## Launch the Demo
 
+Real tracker/calibration mode requires a MediaPipe FaceLandmarker model asset. Point the demo at the `.task` file before launch:
+
+```bash
+export PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task
+make run-demo
+```
+
+If this variable is missing or points to a non-existent file, camera preview can still start, but tracker-backed calibration will show in-app setup guidance instead of failing silently.
+
 ```bash
 make run-demo
 ```

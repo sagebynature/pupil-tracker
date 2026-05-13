@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from desktop_demo.calibration_session import CalibrationSession, CalibrationSessionState
 from desktop_demo.gaze_runtime import GazeRuntime
-from desktop_demo.tracking_runtime import TrackingStatus
+from desktop_demo.tracking_runtime import TrackingRuntime, TrackingStatus
 from desktop_demo.ui.annotations import annotate_observation
 from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
 from desktop_demo.ui.frame_image import bgr_ndarray_to_qimage
@@ -39,7 +39,7 @@ from pupil_tracker.telemetry import (
     raw_observation_event_payload,
     window_candidate_payload,
 )
-from pupil_tracker.tracking import Frame
+from pupil_tracker.tracking import Frame, MediaPipeTrackerBackend
 
 _LOGGER = get_logger("desktop_demo.ui")
 
@@ -143,6 +143,7 @@ class MainWindow(QMainWindow):
         calibration_session: CalibrationSession | None = None,
         gaze_runtime: GazeRuntimeLike | None = None,
         window_provider: WindowProvider | None = None,
+        model_asset_path: Path | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -153,6 +154,8 @@ class MainWindow(QMainWindow):
         self.preview_timer.setInterval(preview_interval_ms)
         self.preview_timer.timeout.connect(self.update_preview_frame)
         self.tracking_runtime = tracking_runtime
+        self.model_asset_path = model_asset_path
+        self._uses_default_calibration_session = calibration_session is None
         self.gaze_runtime = gaze_runtime
         self.window_provider = (
             window_provider if window_provider is not None else list_visible_windows
@@ -230,6 +233,38 @@ class MainWindow(QMainWindow):
             screen_height=screen_height,
         )
 
+    def _show_model_setup_guidance(self, detail: str | None = None) -> None:
+        """Show actionable MediaPipe model setup guidance."""
+
+        message = (
+            "Tracker setup required: set PUPIL_TRACKER_MEDIAPIPE_MODEL "
+            "to a MediaPipe FaceLandmarker .task file"
+        )
+        if detail:
+            message = f"{message} ({detail})"
+        self.debug_label.setText(message)
+
+    def start_tracking(self) -> bool:
+        """Initialize the default MediaPipe tracker when model setup is available."""
+
+        if self.tracking_runtime is not None:
+            return True
+        if self.model_asset_path is None:
+            self._show_model_setup_guidance()
+            return False
+        if not self.model_asset_path.exists():
+            self._show_model_setup_guidance(f"missing: {self.model_asset_path}")
+            return False
+        try:
+            backend = MediaPipeTrackerBackend(model_asset_path=str(self.model_asset_path))
+        except Exception as error:
+            self._show_model_setup_guidance(str(error))
+            _LOGGER.warning("tracker setup failed: %s", error)
+            return False
+        self.tracking_runtime = TrackingRuntime(backend=backend)
+        self.debug_label.setText("Tracker ready")
+        return True
+
     def start_camera(self) -> None:
         """Open the camera source and mark the preview as running."""
 
@@ -254,6 +289,8 @@ class MainWindow(QMainWindow):
     def start_calibration(self) -> None:
         """Start collecting calibration samples from live tracker observations."""
 
+        if self._uses_default_calibration_session and not self.start_tracking():
+            return
         self.calibration_session.start()
         self.calibration_view.refresh()
         self.debug_label.setText("Calibration collecting: look at the visible target")
