@@ -70,6 +70,12 @@ class CalibrationFlowState:
 
         return self._collector.all_samples()
 
+    def reset(self) -> None:
+        """Reset collected samples and return to the first target."""
+
+        self.current_index = 0
+        self._collector.clear()
+
 
 class CalibrationTargetWidget(QWidget):
     """Widget that draws the active normalized calibration target."""
