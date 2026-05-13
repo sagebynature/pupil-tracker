@@ -30,7 +30,8 @@ from desktop_demo.ui.overlay import GazeOverlay
 from pupil_tracker import get_logger
 from pupil_tracker.calibration import PolynomialRidgeCalibrationModel
 from pupil_tracker.camera import CameraError, OpenCVCamera
-from pupil_tracker.models import GazeSample
+from pupil_tracker.models import GazeSample, Point2D, WindowCandidate
+from pupil_tracker.platform import candidate_at_point, list_visible_windows
 from pupil_tracker.telemetry import JsonlLogger
 from pupil_tracker.tracking import Frame
 
@@ -65,6 +66,12 @@ class GazeRuntimeLike(Protocol):
         screen_width: float,
         screen_height: float,
     ) -> Any: ...
+
+
+class WindowProvider(Protocol):
+    """Provider for visible window candidates under the gaze point."""
+
+    def __call__(self) -> tuple[WindowCandidate, ...]: ...
 
 
 class CameraPreviewWorker(QObject):
@@ -129,6 +136,7 @@ class MainWindow(QMainWindow):
         tracking_runtime: TrackingRuntimeLike | None = None,
         calibration_session: CalibrationSession | None = None,
         gaze_runtime: GazeRuntimeLike | None = None,
+        window_provider: WindowProvider | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -140,6 +148,9 @@ class MainWindow(QMainWindow):
         self.preview_timer.timeout.connect(self.update_preview_frame)
         self.tracking_runtime = tracking_runtime
         self.gaze_runtime = gaze_runtime
+        self.window_provider = (
+            window_provider if window_provider is not None else list_visible_windows
+        )
         self.gaze_overlay = GazeOverlay()
         self.telemetry_path = (
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
@@ -296,9 +307,6 @@ class MainWindow(QMainWindow):
             self._update_tracking_status(status)
             return
         self.handle_gaze_sample(sample)
-        self.debug_label.setText(
-            f"Debug: gaze {sample.region_id} | confidence {sample.confidence:.2f}"
-        )
 
     def handle_gaze_sample(self, sample: GazeSample) -> None:
         """Update the transparent overlay from one calibrated gaze sample."""
@@ -306,8 +314,31 @@ class MainWindow(QMainWindow):
         self.gaze_overlay.update_sample(sample)
         if sample.valid:
             self.gaze_overlay.show()
+            self._update_window_candidate_status(sample)
         else:
             self.gaze_overlay.hide()
+
+    def _update_window_candidate_status(self, sample: GazeSample) -> None:
+        """Update debug output with the current visible window candidate."""
+
+        try:
+            candidate = candidate_at_point(
+                Point2D(sample.x, sample.y),
+                self.window_provider(),
+            )
+        except Exception as error:
+            self.debug_label.setText(f"Debug: window unavailable: {error}")
+            return
+        if candidate is None:
+            self.debug_label.setText(
+                f"Debug: gaze {sample.region_id} | confidence {sample.confidence:.2f} | window none"
+            )
+            return
+        title = f" — {candidate.title}" if candidate.title else ""
+        self.debug_label.setText(
+            f"Debug: gaze {sample.region_id} | confidence {sample.confidence:.2f} | "
+            f"window {candidate.app_name}{title}"
+        )
 
     def _update_calibration_status(self, status: TrackingStatus) -> None:
         """Update the debug label with calibration status."""
