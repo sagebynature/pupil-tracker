@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import numpy as np
 from numpy.typing import NDArray
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QPixmap
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -19,12 +20,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from desktop_demo.calibration_session import CalibrationSession, CalibrationSessionState
 from desktop_demo.tracking_runtime import TrackingStatus
 from desktop_demo.ui.annotations import annotate_observation
-from desktop_demo.ui.calibration_view import CalibrationView
+from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
 from desktop_demo.ui.frame_image import bgr_ndarray_to_qimage
 from desktop_demo.ui.overlay import GazeOverlay
 from pupil_tracker import get_logger
+from pupil_tracker.calibration import PolynomialRidgeCalibrationModel
 from pupil_tracker.camera import CameraError, OpenCVCamera
 from pupil_tracker.telemetry import JsonlLogger
 from pupil_tracker.tracking import Frame
@@ -110,6 +113,7 @@ class MainWindow(QMainWindow):
         camera_factory: Callable[[], CameraSource] | None = None,
         preview_interval_ms: int = 33,
         tracking_runtime: TrackingRuntimeLike | None = None,
+        calibration_session: CalibrationSession | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -134,13 +138,25 @@ class MainWindow(QMainWindow):
         self.stop_button = QPushButton("Stop Camera")
         self.start_logging_button = QPushButton("Start Logging")
         self.stop_logging_button = QPushButton("Stop Logging")
-        self.calibration_view = CalibrationView()
+        self.calibration_view = CalibrationView(
+            flow=(
+                cast(CalibrationFlowState, calibration_session.flow)
+                if calibration_session is not None
+                else None
+            )
+        )
+        self.calibration_session = (
+            calibration_session
+            if calibration_session is not None
+            else self._create_default_calibration_session()
+        )
         self.debug_label = QLabel("Debug: confidence -- | region -- | fps --")
 
         self.start_button.clicked.connect(self.start_camera)
         self.stop_button.clicked.connect(self.stop_camera)
         self.start_logging_button.clicked.connect(self.start_logging)
         self.stop_logging_button.clicked.connect(self.stop_logging)
+        self.calibration_view.start_button.clicked.connect(self.start_calibration)
 
         controls = QHBoxLayout()
         controls.addWidget(self.start_button)
@@ -158,6 +174,24 @@ class MainWindow(QMainWindow):
         root = QWidget()
         root.setLayout(layout)
         self.setCentralWidget(root)
+
+    def _create_default_calibration_session(self) -> CalibrationSession:
+        """Create the default calibration session for the current screen."""
+
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            screen_width = 1920.0
+            screen_height = 1080.0
+        else:
+            size = screen.geometry().size()
+            screen_width = float(size.width())
+            screen_height = float(size.height())
+        return CalibrationSession(
+            flow=self.calibration_view.flow,
+            model=PolynomialRidgeCalibrationModel(),
+            screen_width=screen_width,
+            screen_height=screen_height,
+        )
 
     def start_camera(self) -> None:
         """Open the camera source and mark the preview as running."""
@@ -178,6 +212,13 @@ class MainWindow(QMainWindow):
         self.preview_timer.stop()
         self.worker.stop()
         self.preview_label.setText("Camera preview stopped")
+
+    def start_calibration(self) -> None:
+        """Start collecting calibration samples from live tracker observations."""
+
+        self.calibration_session.start()
+        self.calibration_view.refresh()
+        self.debug_label.setText("Calibration collecting: look at the visible target")
 
     def update_preview_frame(self) -> None:
         """Read and display one preview frame from the running camera."""
@@ -202,8 +243,38 @@ class MainWindow(QMainWindow):
         if self.tracking_runtime is None:
             return frame.image
         status = self.tracking_runtime.process(frame)
-        self._update_tracking_status(status)
+        self._handle_tracking_status(status)
         return annotate_observation(frame.image, status.observation)
+
+    def _handle_tracking_status(self, status: TrackingStatus) -> None:
+        """Update UI for one tracker status and capture calibration if active."""
+
+        if self.calibration_session.is_collecting:
+            self.calibration_session.capture(status.observation)
+            self.calibration_view.refresh()
+            self._update_calibration_status(status)
+            return
+        self._update_tracking_status(status)
+
+    def _update_calibration_status(self, status: TrackingStatus) -> None:
+        """Update the debug label with calibration status."""
+
+        session = self.calibration_session
+        if session.state is CalibrationSessionState.COMPLETE and session.fit_result is not None:
+            result = session.fit_result
+            self.debug_label.setText(
+                "Calibration complete: "
+                f"{result.sample_count} samples | mean error {result.mean_error_px:.2f}px | "
+                f"max error {result.max_error_px:.2f}px"
+            )
+        elif session.state is CalibrationSessionState.FAILED:
+            self.debug_label.setText(f"Calibration failed: {session.error_message}")
+        elif status.valid:
+            self.debug_label.setText(
+                f"Calibration collecting: confidence {status.confidence:.2f}"
+            )
+        else:
+            self.debug_label.setText(f"Calibration collecting: {status.message}")
 
     def _update_tracking_status(self, status: TrackingStatus) -> None:
         """Update the debug label with tracker status."""

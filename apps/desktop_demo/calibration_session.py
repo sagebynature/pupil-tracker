@@ -5,9 +5,25 @@ from __future__ import annotations
 from enum import Enum
 from typing import Protocol
 
-from desktop_demo.ui.calibration_view import CalibrationFlowState
 from pupil_tracker.calibration import CalibrationFitResult
 from pupil_tracker.models import CalibrationSample, RawObservation
+
+
+class CalibrationFlowLike(Protocol):
+    """Calibration flow surface used by the session controller."""
+
+    @property
+    def is_complete(self) -> bool:
+        """Return whether all calibration targets have enough samples."""
+
+    def reset(self) -> None:
+        """Reset collected samples and return to the first target."""
+
+    def capture_observation(self, observation: RawObservation) -> bool:
+        """Capture one observation and return whether the flow advanced."""
+
+    def all_samples(self) -> tuple[CalibrationSample, ...]:
+        """Return every valid collected calibration sample."""
 
 
 class CalibrationModelLike(Protocol):
@@ -37,7 +53,7 @@ class CalibrationSession:
     def __init__(
         self,
         *,
-        flow: CalibrationFlowState,
+        flow: CalibrationFlowLike,
         model: CalibrationModelLike,
         screen_width: float,
         screen_height: float,
