@@ -32,7 +32,13 @@ from pupil_tracker.calibration import PolynomialRidgeCalibrationModel
 from pupil_tracker.camera import CameraError, OpenCVCamera
 from pupil_tracker.models import GazeSample, Point2D, WindowCandidate
 from pupil_tracker.platform import candidate_at_point, list_visible_windows
-from pupil_tracker.telemetry import JsonlLogger
+from pupil_tracker.telemetry import (
+    JsonlLogger,
+    calibration_event_payload,
+    gaze_event_payload,
+    raw_observation_event_payload,
+    window_candidate_payload,
+)
 from pupil_tracker.tracking import Frame
 
 _LOGGER = get_logger("desktop_demo.ui")
@@ -275,6 +281,10 @@ class MainWindow(QMainWindow):
         if self.tracking_runtime is None:
             return frame.image
         status = self.tracking_runtime.process(frame)
+        self.log_telemetry_event(
+            "raw_observation",
+            raw_observation_event_payload(status.observation),
+        )
         self._handle_tracking_status(status)
         return annotate_observation(frame.image, status.observation)
 
@@ -282,7 +292,18 @@ class MainWindow(QMainWindow):
         """Update UI for one tracker status and capture calibration if active."""
 
         if self.calibration_session.is_collecting:
+            target = self.calibration_session.flow.current_target
             self.calibration_session.capture(status.observation)
+            if target is not None and status.valid:
+                self.log_telemetry_event(
+                    "calibration_sample",
+                    calibration_event_payload(
+                        target,
+                        sample_count=len(
+                            self.calibration_session.flow.all_samples()
+                        ),
+                    ),
+                )
             self.calibration_view.refresh()
             self._update_calibration_status(status)
             return
@@ -313,6 +334,7 @@ class MainWindow(QMainWindow):
 
         self.gaze_overlay.update_sample(sample)
         if sample.valid:
+            self.log_telemetry_event("gaze_sample", gaze_event_payload(sample))
             self.gaze_overlay.show()
             self._update_window_candidate_status(sample)
         else:
@@ -329,6 +351,7 @@ class MainWindow(QMainWindow):
         except Exception as error:
             self.debug_label.setText(f"Debug: window unavailable: {error}")
             return
+        self.log_telemetry_event("window_candidate", window_candidate_payload(candidate))
         if candidate is None:
             self.debug_label.setText(
                 f"Debug: gaze {sample.region_id} | confidence {sample.confidence:.2f} | window none"

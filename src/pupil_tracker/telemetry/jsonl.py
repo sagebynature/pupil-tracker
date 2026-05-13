@@ -10,7 +10,7 @@ from types import TracebackType
 from typing import Any, Self
 
 from pupil_tracker.logging_config import get_logger
-from pupil_tracker.models import CalibrationTarget, GazeSample, WindowCandidate
+from pupil_tracker.models import CalibrationTarget, GazeSample, RawObservation, WindowCandidate
 
 _LOGGER = get_logger("telemetry")
 
@@ -61,6 +61,17 @@ class JsonlLogger:
         except TypeError as error:
             msg = "telemetry event payload must be JSON serializable"
             raise TypeError(msg) from error
+
+
+def raw_observation_event_payload(observation: RawObservation) -> dict[str, Any]:
+    """Serialize raw tracker observation status without frame or feature vectors."""
+
+    return {
+        "timestamp": observation.timestamp,
+        "valid": observation.valid,
+        "confidence": observation.confidence,
+        "reason": observation.reason,
+    }
 
 
 def gaze_event_payload(sample: GazeSample, *, frame_image: Any | None = None) -> dict[str, Any]:

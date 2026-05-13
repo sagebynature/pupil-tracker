@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Protocol
 
 from pupil_tracker.calibration import CalibrationFitResult
-from pupil_tracker.models import CalibrationSample, RawObservation
+from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObservation
 
 
 class CalibrationFlowLike(Protocol):
@@ -15,6 +15,10 @@ class CalibrationFlowLike(Protocol):
     @property
     def is_complete(self) -> bool:
         """Return whether all calibration targets have enough samples."""
+
+    @property
+    def current_target(self) -> CalibrationTarget | None:
+        """Return the active calibration target, if any."""
 
     def reset(self) -> None:
         """Reset collected samples and return to the first target."""
