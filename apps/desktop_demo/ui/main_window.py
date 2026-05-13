@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
+from desktop_demo.ui.calibration_view import CalibrationView
 from pupil_tracker import get_logger
 
 _LOGGER = get_logger("desktop_demo.ui")
@@ -55,6 +56,7 @@ class MainWindow(QMainWindow):
 
         self.start_button = QPushButton("Start Camera")
         self.stop_button = QPushButton("Stop Camera")
+        self.calibration_view = CalibrationView()
         self.debug_label = QLabel("Debug: confidence -- | region -- | fps --")
 
         self.start_button.clicked.connect(self.start_camera)
@@ -68,6 +70,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
         layout.addWidget(self.preview_label)
         layout.addLayout(controls)
+        layout.addWidget(self.calibration_view)
         layout.addWidget(self.debug_label)
 
         root = QWidget()
