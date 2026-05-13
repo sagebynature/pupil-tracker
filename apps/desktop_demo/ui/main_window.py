@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 from desktop_demo.ui.calibration_view import CalibrationView
+from desktop_demo.ui.overlay import GazeOverlay
 from pupil_tracker import get_logger
 
 _LOGGER = get_logger("desktop_demo.ui")
@@ -49,6 +50,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
         self.worker = CameraPreviewWorker()
+        self.gaze_overlay = GazeOverlay()
 
         self.preview_label = QLabel("Camera preview stopped")
         self.preview_label.setMinimumSize(640, 360)
