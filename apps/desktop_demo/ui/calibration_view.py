@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from pupil_tracker.calibration import CalibrationSampleCollector, grid_pattern
@@ -69,6 +71,54 @@ class CalibrationFlowState:
         return self._collector.all_samples()
 
 
+class CalibrationTargetWidget(QWidget):
+    """Widget that draws the active normalized calibration target."""
+
+    def __init__(self, flow: CalibrationFlowState) -> None:
+        super().__init__()
+        self.flow = flow
+        self.setMinimumSize(320, 220)
+        self.setStyleSheet("background: #050505;")
+
+    def current_target_position(self) -> tuple[float, float] | None:
+        """Return the active target as normalized widget coordinates."""
+
+        target = self.flow.current_target
+        if target is None:
+            return None
+        return (target.x, target.y)
+
+    def current_target_pixel(self) -> tuple[int, int] | None:
+        """Return the active target center in widget pixel coordinates."""
+
+        position = self.current_target_position()
+        if position is None:
+            return None
+        x, y = position
+        return (round(self.width() * x), round(self.height() * y))
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        """Draw the calibration target."""
+
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#050505"))
+        point = self.current_target_pixel()
+        if point is None:
+            painter.setPen(QPen(QColor("#cfcfcf")))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Calibration complete")
+            return
+
+        x, y = point
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(QColor("#ffffff"), 2))
+        painter.drawLine(x - 18, y, x + 18, y)
+        painter.drawLine(x, y - 18, x, y + 18)
+        painter.setBrush(QColor("#00d1ff"))
+        painter.setPen(QPen(QColor("#ffffff"), 2))
+        painter.drawEllipse(x - 8, y - 8, 16, 16)
+
+
 class CalibrationView(QWidget):
     """Simple calibration UI placeholder backed by CalibrationFlowState."""
 
@@ -78,15 +128,22 @@ class CalibrationView(QWidget):
         self.title_label = QLabel("9-point calibration")
         self.target_label = QLabel()
         self.status_label = QLabel()
+        self.target_widget = CalibrationTargetWidget(self.flow)
         self.start_button = QPushButton("Start Calibration")
 
         layout = QVBoxLayout()
         layout.addWidget(self.title_label)
         layout.addWidget(self.target_label)
         layout.addWidget(self.status_label)
+        layout.addWidget(self.target_widget)
         layout.addWidget(self.start_button)
         self.setLayout(layout)
         self.refresh()
+
+    def current_target_position(self) -> tuple[float, float] | None:
+        """Return the active target as normalized widget coordinates."""
+
+        return self.target_widget.current_target_position()
 
     def refresh(self) -> None:
         """Refresh labels from the current flow state."""
@@ -95,6 +152,7 @@ class CalibrationView(QWidget):
         if target is None:
             self.target_label.setText("Calibration complete")
             self.status_label.setText(f"Collected samples: {len(self.flow.all_samples())}")
+            self.target_widget.update()
             return
 
         self.target_label.setText(
@@ -104,3 +162,4 @@ class CalibrationView(QWidget):
         self.status_label.setText(
             f"Samples: {sample_count}/{self.flow.samples_per_target}"
         )
+        self.target_widget.update()
