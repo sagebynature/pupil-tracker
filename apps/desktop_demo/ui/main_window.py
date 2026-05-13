@@ -6,11 +6,12 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Protocol
 
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtGui import QCloseEvent, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 from desktop_demo.ui.calibration_view import CalibrationView
+from desktop_demo.ui.frame_image import bgr_ndarray_to_qimage
 from desktop_demo.ui.overlay import GazeOverlay
 from pupil_tracker import get_logger
 from pupil_tracker.camera import CameraError, OpenCVCamera
@@ -88,12 +89,16 @@ class MainWindow(QMainWindow):
         *,
         telemetry_path: Path | None = None,
         camera_factory: Callable[[], CameraSource] | None = None,
+        preview_interval_ms: int = 33,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
         self.worker = CameraPreviewWorker(
             camera_factory if camera_factory is not None else OpenCVCamera
         )
+        self.preview_timer = QTimer(self)
+        self.preview_timer.setInterval(preview_interval_ms)
+        self.preview_timer.timeout.connect(self.update_preview_frame)
         self.gaze_overlay = GazeOverlay()
         self.telemetry_path = (
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
@@ -143,13 +148,31 @@ class MainWindow(QMainWindow):
             self.debug_label.setText("Debug: camera failed to start")
             _LOGGER.warning("camera preview failed to start: %s", error)
             return
+        self.preview_timer.start()
         self.preview_label.setText("Camera preview running")
 
     def stop_camera(self) -> None:
         """Close the camera source and mark the preview as stopped."""
 
+        self.preview_timer.stop()
         self.worker.stop()
         self.preview_label.setText("Camera preview stopped")
+
+    def update_preview_frame(self) -> None:
+        """Read and display one preview frame from the running camera."""
+
+        try:
+            frame = self.worker.tick()
+        except CameraError as error:
+            self.preview_timer.stop()
+            self.preview_label.setText(str(error))
+            self.debug_label.setText("Debug: camera frame read failed")
+            _LOGGER.warning("camera frame read failed: %s", error)
+            return
+        if frame is None:
+            return
+        qimage = bgr_ndarray_to_qimage(frame.image)
+        self.preview_label.setPixmap(QPixmap.fromImage(qimage))
 
     def start_logging(self) -> None:
         """Start JSONL telemetry logging only after explicit user action."""
