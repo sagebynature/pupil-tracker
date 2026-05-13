@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop_demo.calibration_session import CalibrationSession, CalibrationSessionState
+from desktop_demo.gaze_runtime import GazeRuntime
 from desktop_demo.tracking_runtime import TrackingStatus
 from desktop_demo.ui.annotations import annotate_observation
 from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
@@ -51,6 +52,18 @@ class TrackingRuntimeLike(Protocol):
     def process(self, frame: Frame) -> TrackingStatus: ...
 
     def close(self) -> None: ...
+
+
+class GazeRuntimeLike(Protocol):
+    """Calibrated gaze runtime surface needed by the demo window."""
+
+    def update(
+        self,
+        observation: Any,
+        *,
+        screen_width: float,
+        screen_height: float,
+    ) -> Any: ...
 
 
 class CameraPreviewWorker(QObject):
@@ -114,6 +127,7 @@ class MainWindow(QMainWindow):
         preview_interval_ms: int = 33,
         tracking_runtime: TrackingRuntimeLike | None = None,
         calibration_session: CalibrationSession | None = None,
+        gaze_runtime: GazeRuntimeLike | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -124,6 +138,7 @@ class MainWindow(QMainWindow):
         self.preview_timer.setInterval(preview_interval_ms)
         self.preview_timer.timeout.connect(self.update_preview_frame)
         self.tracking_runtime = tracking_runtime
+        self.gaze_runtime = gaze_runtime
         self.gaze_overlay = GazeOverlay()
         self.telemetry_path = (
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
@@ -150,6 +165,8 @@ class MainWindow(QMainWindow):
             if calibration_session is not None
             else self._create_default_calibration_session()
         )
+        if self.gaze_runtime is None:
+            self.gaze_runtime = GazeRuntime(model=cast(Any, self.calibration_session.model))
         self.debug_label = QLabel("Debug: confidence -- | region -- | fps --")
 
         self.start_button.clicked.connect(self.start_camera)
@@ -175,17 +192,19 @@ class MainWindow(QMainWindow):
         root.setLayout(layout)
         self.setCentralWidget(root)
 
-    def _create_default_calibration_session(self) -> CalibrationSession:
-        """Create the default calibration session for the current screen."""
+    def _screen_size(self) -> tuple[float, float]:
+        """Return primary screen size with a safe fallback for headless tests."""
 
         screen = QApplication.primaryScreen()
         if screen is None:
-            screen_width = 1920.0
-            screen_height = 1080.0
-        else:
-            size = screen.geometry().size()
-            screen_width = float(size.width())
-            screen_height = float(size.height())
+            return (1920.0, 1080.0)
+        size = screen.geometry().size()
+        return (float(size.width()), float(size.height()))
+
+    def _create_default_calibration_session(self) -> CalibrationSession:
+        """Create the default calibration session for the current screen."""
+
+        screen_width, screen_height = self._screen_size()
         return CalibrationSession(
             flow=self.calibration_view.flow,
             model=PolynomialRidgeCalibrationModel(),
@@ -254,7 +273,29 @@ class MainWindow(QMainWindow):
             self.calibration_view.refresh()
             self._update_calibration_status(status)
             return
+        if self.calibration_session.state is CalibrationSessionState.COMPLETE:
+            self._update_gaze_status(status)
+            return
         self._update_tracking_status(status)
+
+    def _update_gaze_status(self, status: TrackingStatus) -> None:
+        """Update the debug label from calibrated gaze when tracking is active."""
+
+        if self.gaze_runtime is None:
+            self._update_tracking_status(status)
+            return
+        screen_width, screen_height = self._screen_size()
+        sample = self.gaze_runtime.update(
+            status.observation,
+            screen_width=screen_width,
+            screen_height=screen_height,
+        )
+        if sample is None:
+            self._update_tracking_status(status)
+            return
+        self.debug_label.setText(
+            f"Debug: gaze {sample.region_id} | confidence {sample.confidence:.2f}"
+        )
 
     def _update_calibration_status(self, status: TrackingStatus) -> None:
         """Update the debug label with calibration status."""
