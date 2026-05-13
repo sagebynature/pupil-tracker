@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QCloseEvent
@@ -13,20 +13,31 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QVB
 from desktop_demo.ui.calibration_view import CalibrationView
 from desktop_demo.ui.overlay import GazeOverlay
 from pupil_tracker import get_logger
+from pupil_tracker.camera import CameraError, OpenCVCamera
 from pupil_tracker.telemetry import JsonlLogger
 
 _LOGGER = get_logger("desktop_demo.ui")
 
 
+class CameraSource(Protocol):
+    """Minimal camera source surface needed by the demo window."""
+
+    def open(self) -> None: ...
+
+    def close(self) -> None: ...
+
+
 class CameraPreviewWorker(QObject):
-    """Placeholder camera preview worker controlled by the main window."""
+    """Camera preview worker controlled by the main window."""
 
     started = Signal()
     stopped = Signal()
     instances_started = 0
 
-    def __init__(self) -> None:
+    def __init__(self, camera_factory: Callable[[], CameraSource]) -> None:
         super().__init__()
+        self._camera_factory = camera_factory
+        self._camera: CameraSource | None = None
         self.running = False
 
     def start(self) -> None:
@@ -34,6 +45,9 @@ class CameraPreviewWorker(QObject):
 
         if self.running:
             return
+        if self._camera is None:
+            self._camera = self._camera_factory()
+        self._camera.open()
         self.running = True
         type(self).instances_started += 1
         _LOGGER.info("camera preview started")
@@ -42,8 +56,11 @@ class CameraPreviewWorker(QObject):
     def stop(self) -> None:
         """Stop the preview worker placeholder."""
 
-        if not self.running:
+        if not self.running and self._camera is None:
             return
+        if self._camera is not None:
+            self._camera.close()
+            self._camera = None
         self.running = False
         _LOGGER.info("camera preview stopped")
         self.stopped.emit()
@@ -52,10 +69,17 @@ class CameraPreviewWorker(QObject):
 class MainWindow(QMainWindow):
     """Desktop demo shell with camera controls and debug placeholders."""
 
-    def __init__(self, *, telemetry_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        telemetry_path: Path | None = None,
+        camera_factory: Callable[[], CameraSource] | None = None,
+    ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
-        self.worker = CameraPreviewWorker()
+        self.worker = CameraPreviewWorker(
+            camera_factory if camera_factory is not None else OpenCVCamera
+        )
         self.gaze_overlay = GazeOverlay()
         self.telemetry_path = (
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
@@ -96,13 +120,19 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
     def start_camera(self) -> None:
-        """Start the camera preview placeholder."""
+        """Open the camera source and mark the preview as running."""
 
-        self.worker.start()
+        try:
+            self.worker.start()
+        except CameraError as error:
+            self.preview_label.setText(str(error))
+            self.debug_label.setText("Debug: camera failed to start")
+            _LOGGER.warning("camera preview failed to start: %s", error)
+            return
         self.preview_label.setText("Camera preview running")
 
     def stop_camera(self) -> None:
-        """Stop the camera preview placeholder."""
+        """Close the camera source and mark the preview as stopped."""
 
         self.worker.stop()
         self.preview_label.setText("Camera preview stopped")
@@ -137,4 +167,5 @@ class MainWindow(QMainWindow):
         """Flush telemetry on close."""
 
         self.stop_logging()
+        self.stop_camera()
         super().closeEvent(event)
