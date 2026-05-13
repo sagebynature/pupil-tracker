@@ -12,6 +12,7 @@ dependencies = [
   "mediapipe>=0.10",
   "PySide6>=6.6",
   "scikit-learn>=1.4",
+  "pyobjc-framework-quartz>=10.0",
 ]
 
 [dependency-groups]
