@@ -1,16 +1,20 @@
-"""Desktop demo entry point placeholder.
+"""Desktop demo entry point."""
 
-The real demo implementation will be added from docs/plans/mvp.md.
-"""
+from __future__ import annotations
 
-from pupil_tracker import configure_logging, get_logger
+import sys
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from desktop_demo.app import run
 
 
 def main() -> int:
-    configure_logging()
-    logger = get_logger("desktop_demo")
-    logger.info("Desktop demo is not implemented yet. See docs/plans/mvp.md.")
-    return 0
+    """Run the desktop demo application."""
+
+    return run()
 
 
 if __name__ == "__main__":
