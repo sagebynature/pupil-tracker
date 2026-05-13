@@ -30,6 +30,7 @@ from desktop_demo.ui.overlay import GazeOverlay
 from pupil_tracker import get_logger
 from pupil_tracker.calibration import PolynomialRidgeCalibrationModel
 from pupil_tracker.camera import CameraError, OpenCVCamera
+from pupil_tracker.models import GazeSample
 from pupil_tracker.telemetry import JsonlLogger
 from pupil_tracker.tracking import Frame
 
@@ -230,6 +231,7 @@ class MainWindow(QMainWindow):
 
         self.preview_timer.stop()
         self.worker.stop()
+        self.gaze_overlay.hide()
         self.preview_label.setText("Camera preview stopped")
 
     def start_calibration(self) -> None:
@@ -293,9 +295,19 @@ class MainWindow(QMainWindow):
         if sample is None:
             self._update_tracking_status(status)
             return
+        self.handle_gaze_sample(sample)
         self.debug_label.setText(
             f"Debug: gaze {sample.region_id} | confidence {sample.confidence:.2f}"
         )
+
+    def handle_gaze_sample(self, sample: GazeSample) -> None:
+        """Update the transparent overlay from one calibrated gaze sample."""
+
+        self.gaze_overlay.update_sample(sample)
+        if sample.valid:
+            self.gaze_overlay.show()
+        else:
+            self.gaze_overlay.hide()
 
     def _update_calibration_status(self, status: TrackingStatus) -> None:
         """Update the debug label with calibration status."""
@@ -361,4 +373,5 @@ class MainWindow(QMainWindow):
         if self.tracking_runtime is not None:
             self.tracking_runtime.close()
             self.tracking_runtime = None
+        self.gaze_overlay.close()
         super().closeEvent(event)
