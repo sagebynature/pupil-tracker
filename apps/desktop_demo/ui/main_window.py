@@ -279,11 +279,15 @@ class MainWindow(QMainWindow):
         self.preview_label.setText("Camera preview running")
 
     def stop_camera(self) -> None:
-        """Close the camera source and mark the preview as stopped."""
+        """Close live demo resources and mark the preview as stopped."""
 
         self.preview_timer.stop()
         self.worker.stop()
+        if self.tracking_runtime is not None:
+            self.tracking_runtime.close()
+            self.tracking_runtime = None
         self.gaze_overlay.hide()
+        self.stop_logging()
         self.preview_label.setText("Camera preview stopped")
 
     def start_calibration(self) -> None:
