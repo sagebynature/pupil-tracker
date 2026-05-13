@@ -76,10 +76,14 @@ Implications:
 
 ### 5. MVP Stack
 
-Decision: Python + PySide6/Qt + OpenCV + MediaPipe.
+Decision: Python + uv + Make + PySide6/Qt + OpenCV + MediaPipe + pytest + ruff + ty.
 
 Rationale:
 - Fast iteration for CV experiments.
+- `uv` provides reproducible environment and lockfile management.
+- `Makefile` provides stable developer commands for sync, lint, typecheck, test, and demo launch.
+- `ty` is the project typechecker.
+- Python source should use standard-library logging through project logging helpers instead of `print`/printf-style diagnostics.
 - Good support for camera preview, calibration UI, debug panels, and transparent overlay windows.
 - Clean path to later port performance-critical or native pieces to C++/Rust/Swift if needed.
 

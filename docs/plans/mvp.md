@@ -6,7 +6,7 @@
 
 **Architecture:** The project is an importable Python package plus a PySide6 desktop demo app. Core tracking, calibration, smoothing, screen mapping, and platform logic live in `src/pupil_tracker`; the desktop demo in `apps/desktop_demo` consumes the library. The first tracker backend uses MediaPipe face/eye/iris landmarks, but the backend interface remains pluggable for future IR/near-eye trackers.
 
-**Tech Stack:** Python, PySide6/Qt, OpenCV, MediaPipe, NumPy, scikit-learn or NumPy-based ridge regression, pytest, macOS CoreGraphics/AppKit/Accessibility-facing adapters where needed.
+**Tech Stack:** Python, uv, Make, PySide6/Qt, OpenCV, MediaPipe, NumPy, scikit-learn or NumPy-based ridge regression, pytest, ruff, ty, macOS CoreGraphics/AppKit/Accessibility-facing adapters where needed.
 
 ---
 
@@ -116,13 +116,17 @@ dependencies = [
   "scikit-learn>=1.4",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "pytest>=8.0",
   "pytest-cov>=4.1",
-  "ruff>=0.4",
-  "mypy>=1.8",
+  "ruff>=0.8",
+  "ty>=0.0.1a8",
 ]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -132,10 +136,10 @@ pythonpath = ["src"]
 line-length = 100
 src = ["src", "apps", "tests"]
 
-[tool.mypy]
-python_version = "3.11"
-strict = true
-mypy_path = "src"
+[tool.ty.environment]
+python-version = "3.11"
+python-platform = "macos"
+root = ["./src", "./apps", "./tests"]
 ```
 
 **Step 2: Create minimal README**
@@ -152,19 +156,19 @@ Include:
 Run:
 
 ```bash
-python -m pip install -e '.[dev]'
-python -m pytest
+uv sync --dev
+make check
 ```
 
 Expected:
-- install succeeds
-- pytest reports no tests collected or initial tests pass
+- uv sync succeeds and writes/updates `uv.lock`
+- lint, ty typechecking, and pytest pass
 
 **Step 4: Commit**
 
 ```bash
-git add pyproject.toml README.md src apps tests
-git commit -m "chore: initialize pupil tracker package"
+git add pyproject.toml uv.lock Makefile README.md src apps tests
+git commit -m "chore: initialize uv project tooling"
 ```
 
 ### Task 2: Define core data models
@@ -836,7 +840,7 @@ Expected: all tests pass.
 
 ```bash
 ruff check src apps tests
-mypy src
+ty check src apps tests
 ```
 
 Expected: pass or document intentional skips.

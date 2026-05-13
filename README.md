@@ -7,7 +7,7 @@ The project is currently in MVP planning. The first implementation target is a P
 ## MVP Direction
 
 - Platform: macOS first.
-- Stack: Python, PySide6/Qt, OpenCV, MediaPipe, NumPy, scikit-learn, pytest.
+- Stack: Python, uv, Make, PySide6/Qt, OpenCV, MediaPipe, NumPy, scikit-learn, pytest, ruff, and ty.
 - Tracking mode: commodity webcam first, with architecture for future IR / near-eye backends.
 - Output levels:
   - raw face / eye / iris observations
@@ -47,13 +47,15 @@ This repository currently contains planning documentation and project setup file
 
 ## Intended Development Setup
 
-Once `pyproject.toml` exists, the expected workflow will be:
+The project uses `uv` for dependency and lockfile management, `make` for common developer commands, `pytest` for tests, `ruff` for linting/formatting, and `ty` for type checking.
 
 ```bash
-python -m pip install -e '.[dev]'
-pytest -v
-python apps/desktop_demo/main.py
+make sync
+make check
+make run-demo
 ```
+
+Python code should use the standard-library `logging` module through `pupil_tracker.logging_config`; avoid `print`/printf-style diagnostics in source code so application callers can route logs consistently.
 
 The desktop demo will require macOS camera permission. Future window-target and focus-related work may require macOS Accessibility permission, but the MVP must not actually focus or raise windows.
 
