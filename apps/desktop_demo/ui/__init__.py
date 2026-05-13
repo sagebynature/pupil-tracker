@@ -1,5 +1,6 @@
 """Qt UI widgets for the desktop demo."""
 
+from desktop_demo.ui.annotations import annotate_observation
 from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
 from desktop_demo.ui.frame_image import bgr_ndarray_to_qimage
 from desktop_demo.ui.main_window import CameraPreviewWorker, MainWindow
@@ -13,5 +14,6 @@ __all__ = [
     "GazeOverlay",
     "MainWindow",
     "OverlayState",
+    "annotate_observation",
     "bgr_ndarray_to_qimage",
 ]

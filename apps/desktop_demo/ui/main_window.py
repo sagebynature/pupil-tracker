@@ -6,10 +6,21 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Protocol
 
+import numpy as np
+from numpy.typing import NDArray
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
+from desktop_demo.tracking_runtime import TrackingStatus
+from desktop_demo.ui.annotations import annotate_observation
 from desktop_demo.ui.calibration_view import CalibrationView
 from desktop_demo.ui.frame_image import bgr_ndarray_to_qimage
 from desktop_demo.ui.overlay import GazeOverlay
@@ -29,6 +40,14 @@ class CameraSource(Protocol):
     def close(self) -> None: ...
 
     def read(self) -> Frame: ...
+
+
+class TrackingRuntimeLike(Protocol):
+    """Tracking runtime surface needed by the demo window."""
+
+    def process(self, frame: Frame) -> TrackingStatus: ...
+
+    def close(self) -> None: ...
 
 
 class CameraPreviewWorker(QObject):
@@ -90,6 +109,7 @@ class MainWindow(QMainWindow):
         telemetry_path: Path | None = None,
         camera_factory: Callable[[], CameraSource] | None = None,
         preview_interval_ms: int = 33,
+        tracking_runtime: TrackingRuntimeLike | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -99,6 +119,7 @@ class MainWindow(QMainWindow):
         self.preview_timer = QTimer(self)
         self.preview_timer.setInterval(preview_interval_ms)
         self.preview_timer.timeout.connect(self.update_preview_frame)
+        self.tracking_runtime = tracking_runtime
         self.gaze_overlay = GazeOverlay()
         self.telemetry_path = (
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
@@ -171,8 +192,28 @@ class MainWindow(QMainWindow):
             return
         if frame is None:
             return
-        qimage = bgr_ndarray_to_qimage(frame.image)
+        image = self._preview_image_for_frame(frame)
+        qimage = bgr_ndarray_to_qimage(image)
         self.preview_label.setPixmap(QPixmap.fromImage(qimage))
+
+    def _preview_image_for_frame(self, frame: Frame) -> NDArray[np.uint8]:
+        """Return the image to render for a frame, annotated when tracking is enabled."""
+
+        if self.tracking_runtime is None:
+            return frame.image
+        status = self.tracking_runtime.process(frame)
+        self._update_tracking_status(status)
+        return annotate_observation(frame.image, status.observation)
+
+    def _update_tracking_status(self, status: TrackingStatus) -> None:
+        """Update the debug label with tracker status."""
+
+        if status.valid:
+            self.debug_label.setText(
+                f"Debug: confidence {status.confidence:.2f} | tracking {status.message}"
+            )
+        else:
+            self.debug_label.setText(f"Debug: tracking {status.message}")
 
     def start_logging(self) -> None:
         """Start JSONL telemetry logging only after explicit user action."""
@@ -205,4 +246,7 @@ class MainWindow(QMainWindow):
 
         self.stop_logging()
         self.stop_camera()
+        if self.tracking_runtime is not None:
+            self.tracking_runtime.close()
+            self.tracking_runtime = None
         super().closeEvent(event)
