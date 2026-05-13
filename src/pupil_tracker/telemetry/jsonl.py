@@ -10,6 +10,7 @@ from types import TracebackType
 from typing import Any, Self
 
 from pupil_tracker.logging_config import get_logger
+from pupil_tracker.models import CalibrationTarget, GazeSample, WindowCandidate
 
 _LOGGER = get_logger("telemetry")
 
@@ -60,3 +61,50 @@ class JsonlLogger:
         except TypeError as error:
             msg = "telemetry event payload must be JSON serializable"
             raise TypeError(msg) from error
+
+
+def gaze_event_payload(sample: GazeSample, *, frame_image: Any | None = None) -> dict[str, Any]:
+    """Serialize a gaze sample without frame/image payloads."""
+
+    del frame_image
+    return {
+        "timestamp": sample.timestamp,
+        "x": sample.x,
+        "y": sample.y,
+        "confidence": sample.confidence,
+        "valid": sample.valid,
+        "region_id": sample.region_id,
+    }
+
+
+def calibration_event_payload(
+    target: CalibrationTarget,
+    *,
+    sample_count: int,
+) -> dict[str, Any]:
+    """Serialize calibration progress for a target without raw frame data."""
+
+    return {
+        "target_id": target.id,
+        "target_x": target.x,
+        "target_y": target.y,
+        "sample_count": sample_count,
+    }
+
+
+def window_candidate_payload(candidate: WindowCandidate | None) -> dict[str, Any]:
+    """Serialize a likely window candidate without changing window focus."""
+
+    if candidate is None:
+        return {"candidate": None}
+    return {
+        "app_name": candidate.app_name,
+        "title": candidate.title,
+        "bounds": {
+            "x": candidate.bounds.x,
+            "y": candidate.bounds.y,
+            "width": candidate.bounds.width,
+            "height": candidate.bounds.height,
+        },
+        "score": candidate.score,
+    }
