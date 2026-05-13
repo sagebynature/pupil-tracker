@@ -6,7 +6,7 @@
 
 **Architecture:** The project is an importable Python package plus a PySide6 desktop demo app. Core tracking, calibration, smoothing, screen mapping, and platform logic live in `src/pupil_tracker`; the desktop demo in `apps/desktop_demo` consumes the library. The first tracker backend uses MediaPipe face/eye/iris landmarks, but the backend interface remains pluggable for future IR/near-eye trackers.
 
-**Tech Stack:** Python, uv, Make, PySide6/Qt, OpenCV, MediaPipe, NumPy, scikit-learn or NumPy-based ridge regression, pytest, ruff, ty, macOS CoreGraphics/AppKit/Accessibility-facing adapters where needed.
+**Tech Stack:** Python, uv, Make, PySide6/Qt, OpenCV, MediaPipe Tasks, NumPy, scikit-learn polynomial/ridge regression, pytest, ruff, ty, and macOS CoreGraphics via `pyobjc-framework-quartz`.
 
 ---
 
@@ -53,15 +53,14 @@ pupil-tracker/
       filters.py
     screen/
       __init__.py
-      geometry.py
       regions.py
     platform/
       __init__.py
       macos_windows.py
     runtime/
       __init__.py
-      stream.py
-    logging/
+      pipeline.py
+    telemetry/
       __init__.py
       jsonl.py
   apps/desktop_demo/
@@ -72,7 +71,6 @@ pupil-tracker/
       __init__.py
       main_window.py
       calibration_view.py
-      debug_view.py
       overlay.py
   tests/
     test_models.py
@@ -80,8 +78,12 @@ pupil-tracker/
     test_calibration_model.py
     test_regions.py
     test_smoothing.py
-    test_runtime_mock.py
+    test_runtime_pipeline.py
+    test_telemetry_privacy.py
+    test_macos_windows.py
 ```
+
+Implementation note: the checked-in MVP uses the `telemetry/` package for JSONL helpers instead of a `logging/` package, and the debug UI remains embedded in the MVP main window rather than split into a standalone `debug_view.py`.
 
 ## Implementation Tasks
 

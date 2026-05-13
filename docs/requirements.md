@@ -168,7 +168,7 @@ Requirements:
 
 ### 11. License Posture
 
-Decision: Permissive-first core, likely MIT or Apache-2.0; optional GPL adapters later only with clear boundaries.
+Decision: MIT permissive-first core; optional GPL adapters later only with clear boundaries.
 
 Rules:
 - Do not copy GPL code into the core.
@@ -197,6 +197,8 @@ Calibration exports should include:
 - calibration error / quality
 
 Do not record camera video or frames by default. Any future video/frame capture must be explicit opt-in.
+
+Implementation note: the MVP JSONL telemetry controls are opt-in and the payload serializers intentionally omit frame/image arrays.
 
 ### 13. Calibration Model
 
@@ -281,6 +283,8 @@ Manual validation covers:
 - overlay cursor
 - macOS window enumeration
 
+See `docs/manual-test-checklist.md` for the manual hardware/GUI checklist.
+
 Future validation:
 - opt-in recorded sample replay tests.
 
@@ -294,10 +298,16 @@ Future validation:
 - GPL dependency adoption in the core package.
 - Product-polished UI.
 
+## Resolved Implementation Choices
+
+- License: MIT.
+- macOS window enumeration: CoreGraphics via `pyobjc-framework-quartz`; no Accessibility permission is needed for MVP enumeration/scoring.
+- MediaPipe integration: the installed MediaPipe package exposes the Tasks API, so the backend uses FaceLandmarker-style adapters and injectable fakes in tests.
+- Demo telemetry: JSONL under ignored `metrics/`, enabled only by explicit Start Logging / Stop Logging controls.
+
 ## Open Questions for Later
 
-- MIT vs Apache-2.0 final license.
-- Whether to support multiple monitors in MVP or immediately after.
-- Exact macOS window enumeration approach: Accessibility API, CoreGraphics, AppKit, or combination.
+- Whether to support multiple monitors immediately after MVP.
 - Packaging strategy: editable/developer app first vs packaged `.app` early.
-- Whether MediaPipe Tasks API or legacy solutions API is the best Python dependency path at implementation time.
+- How to wire the live runtime pipeline into the demo shell for a polished end-to-end run.
+- Whether future gaze-to-focus work should use Accessibility API, AppleScript, AppKit, or a separate user-approved controller.
