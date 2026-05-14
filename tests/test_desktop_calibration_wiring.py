@@ -480,6 +480,9 @@ def test_validation_completion_displays_metrics_and_retry_guidance(
     assert validation_session.metrics is not None
     assert validation_session.metrics.recommendation == "retry"
     assert "Validation complete" in window.debug_label.text()
+    assert "mean X error" in window.debug_label.text()
+    assert "mean Y error" in window.debug_label.text()
+    assert "Y bias" in window.debug_label.text()
     assert "retry calibration" in window.debug_label.text()
     window.close()
     qt_app.processEvents()

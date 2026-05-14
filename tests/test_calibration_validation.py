@@ -53,6 +53,10 @@ def test_exact_gaze_at_validation_target_returns_zero_error() -> None:
     assert metrics.median_error_px == 0.0
     assert metrics.max_error_px == 0.0
     assert metrics.per_target_error_px == {"v0": 0.0}
+    assert metrics.mean_abs_x_error_px == 0.0
+    assert metrics.mean_abs_y_error_px == 0.0
+    assert metrics.mean_signed_y_error_px == 0.0
+    assert metrics.per_target_signed_y_error_px == {"v0": 0.0}
     assert metrics.recommendation == "excellent"
 
 
@@ -75,6 +79,28 @@ def test_validation_metrics_compute_mean_median_max_and_per_target_error() -> No
     assert metrics.max_error_px == pytest.approx(120.0)
     assert metrics.per_target_error_px == {"v0": pytest.approx(30.0), "v1": pytest.approx(120.0)}
     assert metrics.recommendation == "excellent"
+
+
+def test_validation_metrics_report_per_axis_error() -> None:
+    target_a, target_b = validation_pattern()[:2]
+
+    metrics = compute_validation_metrics(
+        [
+            ValidationSample(target=target_a, gaze_sample=gaze(x=260.0, y=230.0)),
+            ValidationSample(target=target_a, gaze_sample=gaze(x=230.0, y=210.0)),
+            ValidationSample(target=target_b, gaze_sample=gaze(x=780.0, y=160.0)),
+        ],
+        screen_width=1000.0,
+        screen_height=800.0,
+    )
+
+    assert metrics.mean_abs_x_error_px == pytest.approx(20.0)
+    assert metrics.mean_abs_y_error_px == pytest.approx(26.6666667)
+    assert metrics.mean_signed_y_error_px == pytest.approx(0.0)
+    assert metrics.per_target_signed_y_error_px == {
+        "v0": pytest.approx(20.0),
+        "v1": pytest.approx(-40.0),
+    }
 
 
 @pytest.mark.parametrize(

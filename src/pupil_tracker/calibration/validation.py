@@ -40,6 +40,10 @@ class ValidationMetrics:
     median_error_px: float
     max_error_px: float
     per_target_error_px: Mapping[str, float]
+    mean_abs_x_error_px: float
+    mean_abs_y_error_px: float
+    mean_signed_y_error_px: float
+    per_target_signed_y_error_px: Mapping[str, float]
     recommendation: ValidationRecommendation
 
 
@@ -68,15 +72,25 @@ def compute_validation_metrics(
         raise ValueError(msg)
 
     errors: list[float] = []
+    abs_x_errors: list[float] = []
+    abs_y_errors: list[float] = []
+    signed_y_errors: list[float] = []
     errors_by_target: dict[str, list[float]] = defaultdict(list)
+    signed_y_errors_by_target: dict[str, list[float]] = defaultdict(list)
     for sample in samples:
         if not sample.gaze_sample.valid:
             continue
         target_x = sample.target.x * screen_width
         target_y = sample.target.y * screen_height
-        error_px = hypot(sample.gaze_sample.x - target_x, sample.gaze_sample.y - target_y)
+        dx = sample.gaze_sample.x - target_x
+        dy = sample.gaze_sample.y - target_y
+        error_px = hypot(dx, dy)
         errors.append(error_px)
+        abs_x_errors.append(abs(dx))
+        abs_y_errors.append(abs(dy))
+        signed_y_errors.append(dy)
         errors_by_target[sample.target.id].append(error_px)
+        signed_y_errors_by_target[sample.target.id].append(dy)
 
     if not errors:
         msg = "at least one valid validation sample is required"
@@ -91,6 +105,13 @@ def compute_validation_metrics(
         per_target_error_px={
             target_id: sum(target_errors) / len(target_errors)
             for target_id, target_errors in errors_by_target.items()
+        },
+        mean_abs_x_error_px=sum(abs_x_errors) / len(abs_x_errors),
+        mean_abs_y_error_px=sum(abs_y_errors) / len(abs_y_errors),
+        mean_signed_y_error_px=sum(signed_y_errors) / len(signed_y_errors),
+        per_target_signed_y_error_px={
+            target_id: sum(target_errors) / len(target_errors)
+            for target_id, target_errors in signed_y_errors_by_target.items()
         },
         recommendation=_recommend(mean_error),
     )

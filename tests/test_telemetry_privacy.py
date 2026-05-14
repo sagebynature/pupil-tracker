@@ -89,6 +89,10 @@ def test_calibration_gaze_and_window_events_serialize_as_json(tmp_path: Path) ->
         median_error_px=35.0,
         max_error_px=80.0,
         per_target_error_px={"v0": 20.0, "v1": 60.0},
+        mean_abs_x_error_px=15.0,
+        mean_abs_y_error_px=25.0,
+        mean_signed_y_error_px=-10.0,
+        per_target_signed_y_error_px={"v0": -5.0, "v1": -15.0},
         recommendation="excellent",
     )
 
@@ -131,6 +135,10 @@ def test_calibration_gaze_and_window_events_serialize_as_json(tmp_path: Path) ->
         "median_error_px": 35.0,
         "max_error_px": 80.0,
         "per_target_error_px": {"v0": 20.0, "v1": 60.0},
+        "mean_abs_x_error_px": 15.0,
+        "mean_abs_y_error_px": 25.0,
+        "mean_signed_y_error_px": -10.0,
+        "per_target_signed_y_error_px": {"v0": -5.0, "v1": -15.0},
         "recommendation": "excellent",
     }
     assert events[4]["payload"] == {

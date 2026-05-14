@@ -540,6 +540,9 @@ class MainWindow(QMainWindow):
             self.debug_label.setText(
                 "Validation complete: "
                 f"mean error {metrics.mean_error_px:.2f}px | "
+                f"mean X error {metrics.mean_abs_x_error_px:.2f}px | "
+                f"mean Y error {metrics.mean_abs_y_error_px:.2f}px | "
+                f"Y bias {metrics.mean_signed_y_error_px:+.2f}px | "
                 f"max error {metrics.max_error_px:.2f}px | {guidance}"
             )
             self.calibration_view.validation_button.setEnabled(True)

@@ -128,6 +128,10 @@ def validation_metrics_payload(metrics: ValidationMetrics) -> dict[str, Any]:
         "median_error_px": metrics.median_error_px,
         "max_error_px": metrics.max_error_px,
         "per_target_error_px": dict(metrics.per_target_error_px),
+        "mean_abs_x_error_px": metrics.mean_abs_x_error_px,
+        "mean_abs_y_error_px": metrics.mean_abs_y_error_px,
+        "mean_signed_y_error_px": metrics.mean_signed_y_error_px,
+        "per_target_signed_y_error_px": dict(metrics.per_target_signed_y_error_px),
         "recommendation": metrics.recommendation,
     }
 
