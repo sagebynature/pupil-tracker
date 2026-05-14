@@ -35,6 +35,7 @@ from desktop_demo.ui.overlay import GazeOverlay
 from desktop_demo.validation_session import ValidationSession, ValidationSessionState
 from pupil_tracker import get_logger
 from pupil_tracker.calibration import (
+    LinearRidgeCalibrationModel,
     PolynomialRidgeCalibrationModel,
     TimedCalibrationConfig,
     validation_pattern,
@@ -387,9 +388,16 @@ class MainWindow(QMainWindow):
             self.debug_label.setText("Vertical calibration unavailable for injected sessions")
             return
         flow = CalibrationFlowState(targets=vertical_grid_pattern())
-        self.calibration_view.set_flow(flow, title="15-point vertical calibration")
+        self.calibration_view.set_flow(flow, title="15-point linear vertical calibration")
         self.calibration_target_overlay.flow = flow
-        self.calibration_session = self._create_default_calibration_session()
+        screen_width, screen_height = self._screen_size()
+        self.calibration_session = CalibrationSession(
+            flow=flow,
+            model=LinearRidgeCalibrationModel(),
+            screen_width=screen_width,
+            screen_height=screen_height,
+            timing_config=TimedCalibrationConfig(),
+        )
         self.gaze_runtime = GazeRuntime(model=cast(Any, self.calibration_session.model))
         self.start_calibration()
 

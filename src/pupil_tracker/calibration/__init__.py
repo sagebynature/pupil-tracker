@@ -1,6 +1,10 @@
 """Calibration utilities for target generation, samples, and gaze mapping."""
 
-from pupil_tracker.calibration.model import CalibrationFitResult, PolynomialRidgeCalibrationModel
+from pupil_tracker.calibration.model import (
+    CalibrationFitResult,
+    LinearRidgeCalibrationModel,
+    PolynomialRidgeCalibrationModel,
+)
 from pupil_tracker.calibration.patterns import grid_pattern, vertical_grid_pattern
 from pupil_tracker.calibration.quality import (
     CalibrationQualityFilter,
@@ -29,6 +33,7 @@ __all__ = [
     "CalibrationQualityFilter",
     "CalibrationSampleCollector",
     "CalibrationSampleDecision",
+    "LinearRidgeCalibrationModel",
     "PolynomialRidgeCalibrationModel",
     "TargetQualitySummary",
     "TimedCalibrationConfig",

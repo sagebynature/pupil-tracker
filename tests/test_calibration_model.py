@@ -2,7 +2,10 @@
 
 import pytest
 
-from pupil_tracker.calibration.model import PolynomialRidgeCalibrationModel
+from pupil_tracker.calibration.model import (
+    LinearRidgeCalibrationModel,
+    PolynomialRidgeCalibrationModel,
+)
 from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObservation
 
 
@@ -62,6 +65,25 @@ def test_predict_maps_synthetic_observation_to_screen_coordinates() -> None:
     assert prediction.confidence == 0.8
     assert prediction.x == pytest.approx(250.0, abs=1e-6)
     assert prediction.y == pytest.approx(375.0, abs=1e-6)
+
+
+def test_linear_ridge_model_uses_safer_first_order_mapping() -> None:
+    model = LinearRidgeCalibrationModel(alpha=0.0)
+    model.fit(_grid_samples(), screen_width=1000, screen_height=500)
+
+    prediction = model.predict(
+        RawObservation(
+            timestamp=11.0,
+            valid=True,
+            confidence=0.8,
+            feature_vector=(0.75, 0.25),
+        ),
+        screen_width=1000,
+        screen_height=500,
+    )
+
+    assert prediction.x == pytest.approx(750.0, abs=1e-6)
+    assert prediction.y == pytest.approx(125.0, abs=1e-6)
 
 
 def test_predict_before_fit_raises_clear_error() -> None:

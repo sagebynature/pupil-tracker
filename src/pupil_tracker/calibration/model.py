@@ -139,3 +139,10 @@ class PolynomialRidgeCalibrationModel:
         if screen_width <= 0 or screen_height <= 0:
             msg = "screen dimensions must be positive"
             raise ValueError(msg)
+
+
+class LinearRidgeCalibrationModel(PolynomialRidgeCalibrationModel):
+    """Safer first-order ridge calibration model for noisy live gaze features."""
+
+    def __init__(self, alpha: float = 1.0) -> None:
+        super().__init__(degree=1, alpha=alpha)

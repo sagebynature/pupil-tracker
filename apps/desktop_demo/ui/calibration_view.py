@@ -178,7 +178,7 @@ class CalibrationView(QWidget):
         self.status_label = QLabel()
         self.target_widget = CalibrationTargetWidget(self.flow)
         self.start_button = QPushButton("Start Calibration")
-        self.vertical_calibration_button = QPushButton("Start Vertical Calibration")
+        self.vertical_calibration_button = QPushButton("Start Linear Vertical Calibration")
         self.validation_button = QPushButton("Start Validation")
         self.validation_button.setEnabled(False)
 

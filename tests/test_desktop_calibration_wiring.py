@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication
 
 from pupil_tracker.calibration import (
     CalibrationFitResult,
+    LinearRidgeCalibrationModel,
     TimedCalibrationConfig,
     validation_pattern,
 )
@@ -181,7 +182,8 @@ def test_start_vertical_calibration_uses_dense_vertical_pattern(
     assert window.calibration_session.flow is flow
     assert window.calibration_view.flow is flow
     assert window.calibration_target_overlay.flow is flow
-    assert window.calibration_view.title_label.text() == "15-point vertical calibration"
+    assert isinstance(window.calibration_session.model, LinearRidgeCalibrationModel)
+    assert window.calibration_view.title_label.text() == "15-point linear vertical calibration"
     assert window.calibration_target_overlay.isVisible()
     window.close()
     qt_app.processEvents()
