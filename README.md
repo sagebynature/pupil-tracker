@@ -120,9 +120,18 @@ After calibration completes, run validation before judging tracking quality. Val
 - Mean error: average distance between validation target and predicted gaze.
 - Median error: typical distance, less sensitive to outliers.
 - Max error: worst observed distance.
+- Mean X error: average horizontal miss distance.
+- Mean Y error: average vertical miss distance.
+- Y bias: signed vertical offset; positive means predictions are lower on screen than the target, negative means predictions are higher.
 - Recommendation: `excellent`, `good`, `usable`, or `retry`.
 
-Use the validation overlay to diagnose failures. The target dot is where you should look, the predicted dot is the calibrated estimate, and the line between them is the current error. If the recommendation is `retry`, improve lighting/camera position, reduce head movement, and recalibrate.
+Use the validation overlay to diagnose failures. The target dot is where you should look, the predicted dot is the calibrated estimate, and the line between them is the current error. If vertical tracking feels weaker than horizontal tracking, compare Mean X error, Mean Y error, and Y bias before changing model settings:
+
+- High Y bias in the same direction across runs usually means camera angle, seating position, or calibration posture is systematically offset. Reposition the camera, reduce head pitch, improve lighting, and recalibrate.
+- High Mean Y error with low signed Y bias usually means vertical estimates are noisy or compressed around the center. That points to feature extraction improvements rather than blind model tuning.
+- High X and Y error together usually means the full calibration was poor; improve face visibility/head stability and retry.
+
+If the recommendation is `retry`, improve lighting/camera position, reduce head movement, and recalibrate.
 
 Calibration targets are shown fullscreen because the fitted model maps observations to full-monitor coordinates. The outer 9-point targets remain inset from the physical edges so they sample the usable screen area without forcing hard-to-hold edge fixations.
 
