@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from pupil_tracker.models import RawObservation
 
@@ -13,6 +15,18 @@ class CalibrationSampleDecision:
 
     accepted: bool
     reason: str
+
+
+@dataclass(frozen=True)
+class TargetQualitySummary:
+    """Per-target calibration capture quality summary."""
+
+    target_id: str
+    accepted_count: int
+    rejected_count: int
+    mean_confidence: float
+    meets_min_samples: bool
+    recommendation: Literal["advance", "retry"]
 
 
 class CalibrationQualityFilter:
@@ -65,3 +79,37 @@ class CalibrationQualityFilter:
                 ),
             )
         return CalibrationSampleDecision(accepted=True, reason="accepted")
+
+
+def summarize_target_quality(
+    *,
+    target_id: str,
+    accepted_observations: Sequence[RawObservation],
+    rejected_count: int,
+    min_samples: int,
+) -> TargetQualitySummary:
+    """Summarize whether a calibration target has enough accepted samples."""
+
+    if min_samples <= 0:
+        msg = "min_samples must be positive"
+        raise ValueError(msg)
+    if rejected_count < 0:
+        msg = "rejected_count must be non-negative"
+        raise ValueError(msg)
+
+    accepted_count = len(accepted_observations)
+    mean_confidence = (
+        sum(observation.confidence for observation in accepted_observations)
+        / accepted_count
+        if accepted_count > 0
+        else 0.0
+    )
+    meets_min_samples = accepted_count >= min_samples
+    return TargetQualitySummary(
+        target_id=target_id,
+        accepted_count=accepted_count,
+        rejected_count=rejected_count,
+        mean_confidence=mean_confidence,
+        meets_min_samples=meets_min_samples,
+        recommendation="advance" if meets_min_samples else "retry",
+    )

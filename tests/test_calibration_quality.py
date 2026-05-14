@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from pupil_tracker.calibration import CalibrationQualityFilter
+from pupil_tracker.calibration import CalibrationQualityFilter, summarize_target_quality
 from pupil_tracker.models import RawObservation
 
 
@@ -80,3 +80,61 @@ def test_quality_filter_rejects_invalid_confidence_threshold(
 ) -> None:
     with pytest.raises(ValueError, match="min_confidence must be between 0 and 1"):
         CalibrationQualityFilter(min_confidence=min_confidence)
+
+
+def test_target_quality_summary_advances_with_enough_accepted_samples() -> None:
+    summary = summarize_target_quality(
+        target_id="r0c0",
+        accepted_observations=(
+            observation(confidence=0.8),
+            observation(confidence=0.9),
+        ),
+        rejected_count=1,
+        min_samples=2,
+    )
+
+    assert summary.target_id == "r0c0"
+    assert summary.accepted_count == 2
+    assert summary.rejected_count == 1
+    assert summary.mean_confidence == pytest.approx(0.85)
+    assert summary.meets_min_samples is True
+    assert summary.recommendation == "advance"
+
+
+def test_target_quality_summary_retries_with_too_few_accepted_samples() -> None:
+    summary = summarize_target_quality(
+        target_id="r0c0",
+        accepted_observations=(observation(confidence=0.8),),
+        rejected_count=3,
+        min_samples=2,
+    )
+
+    assert summary.accepted_count == 1
+    assert summary.rejected_count == 3
+    assert summary.mean_confidence == pytest.approx(0.8)
+    assert summary.meets_min_samples is False
+    assert summary.recommendation == "retry"
+
+
+def test_target_quality_summary_reports_zero_confidence_for_no_accepted_samples() -> None:
+    summary = summarize_target_quality(
+        target_id="r0c0",
+        accepted_observations=(),
+        rejected_count=5,
+        min_samples=2,
+    )
+
+    assert summary.accepted_count == 0
+    assert summary.rejected_count == 5
+    assert summary.mean_confidence == 0.0
+    assert summary.recommendation == "retry"
+
+
+def test_target_quality_summary_rejects_invalid_min_samples() -> None:
+    with pytest.raises(ValueError, match="min_samples must be positive"):
+        summarize_target_quality(
+            target_id="r0c0",
+            accepted_observations=(),
+            rejected_count=0,
+            min_samples=0,
+        )
