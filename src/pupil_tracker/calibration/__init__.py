@@ -2,6 +2,10 @@
 
 from pupil_tracker.calibration.model import CalibrationFitResult, PolynomialRidgeCalibrationModel
 from pupil_tracker.calibration.patterns import grid_pattern
+from pupil_tracker.calibration.quality import (
+    CalibrationQualityFilter,
+    CalibrationSampleDecision,
+)
 from pupil_tracker.calibration.samples import CalibrationSampleCollector
 from pupil_tracker.calibration.timing import (
     CalibrationPhase,
@@ -13,7 +17,9 @@ from pupil_tracker.calibration.timing import (
 __all__ = [
     "CalibrationFitResult",
     "CalibrationPhase",
+    "CalibrationQualityFilter",
     "CalibrationSampleCollector",
+    "CalibrationSampleDecision",
     "PolynomialRidgeCalibrationModel",
     "TimedCalibrationConfig",
     "TimedTargetState",
