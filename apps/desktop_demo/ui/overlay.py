@@ -12,6 +12,7 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
+from pupil_tracker.calibration import ValidationTarget
 from pupil_tracker.models import GazeSample, Point2D
 
 _DEFAULT_DOT_RADIUS: Final[float] = 6.0
@@ -96,6 +97,79 @@ class OverlayState:
         self.current = self.render_state_for(sample)
         if sample.valid:
             self._trail.append(Point2D(sample.x, sample.y))
+        return self.current
+
+
+@dataclass(frozen=True)
+class ErrorSegment:
+    """Screen-space validation error line between target and prediction."""
+
+    start: Point2D
+    end: Point2D
+
+
+@dataclass(frozen=True)
+class ValidationRenderState:
+    """Computed validation overlay drawing state."""
+
+    target: Point2D
+    prediction: CursorRenderState | None
+    error_segment: ErrorSegment | None
+
+
+class ValidationOverlayState:
+    """Pure validation overlay state with target, prediction, error line, and trail."""
+
+    def __init__(
+        self,
+        *,
+        dot_radius: float = _DEFAULT_DOT_RADIUS,
+        min_halo_radius: float = _DEFAULT_MIN_HALO_RADIUS,
+        max_halo_radius: float = _DEFAULT_MAX_HALO_RADIUS,
+        max_trail_length: int = 30,
+    ) -> None:
+        self._cursor_state = OverlayState(
+            dot_radius=dot_radius,
+            min_halo_radius=min_halo_radius,
+            max_halo_radius=max_halo_radius,
+            max_trail_length=max_trail_length,
+        )
+        self.current: ValidationRenderState | None = None
+
+    @property
+    def trail(self) -> tuple[Point2D, ...]:
+        """Return bounded valid prediction history for validation drawing."""
+
+        return self._cursor_state.trail
+
+    def update_validation(
+        self,
+        *,
+        target: ValidationTarget,
+        sample: GazeSample,
+        screen_width: float,
+        screen_height: float,
+    ) -> ValidationRenderState:
+        """Update validation overlay from one target and predicted gaze sample."""
+
+        target_point = Point2D(target.x * screen_width, target.y * screen_height)
+        prediction = self._cursor_state.update(sample)
+        if prediction.visible:
+            error_segment = ErrorSegment(
+                start=target_point,
+                end=Point2D(prediction.x, prediction.y),
+            )
+            self.current = ValidationRenderState(
+                target=target_point,
+                prediction=prediction,
+                error_segment=error_segment,
+            )
+        else:
+            self.current = ValidationRenderState(
+                target=target_point,
+                prediction=None,
+                error_segment=None,
+            )
         return self.current
 
 

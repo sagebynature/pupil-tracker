@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pupil_tracker.calibration import ValidationTarget
 from pupil_tracker.models import GazeSample
 
 if TYPE_CHECKING:
@@ -91,4 +92,72 @@ def test_debug_trail_keeps_bounded_history_of_valid_samples() -> None:
     overlay.update(_sample(0.0, valid=False, x=4.0, y=4.0))
     overlay.update(_sample(0.9, x=5.0, y=5.0))
 
-    assert [(point.x, point.y) for point in overlay.trail] == [(2.0, 2.0), (3.0, 3.0), (5.0, 5.0)]
+    assert [(point.x, point.y) for point in overlay.trail] == [
+        (2.0, 2.0),
+        (3.0, 3.0),
+        (5.0, 5.0),
+    ]
+
+
+def test_validation_overlay_target_and_prediction_create_error_segment() -> None:
+    from desktop_demo.ui.overlay import ValidationOverlayState
+
+    overlay = ValidationOverlayState(max_trail_length=3)
+    target = ValidationTarget(id="v0", x=0.25, y=0.25)
+
+    state = overlay.update_validation(
+        target=target,
+        sample=_sample(0.8, x=280.0, y=220.0),
+        screen_width=1000.0,
+        screen_height=800.0,
+    )
+
+    assert state.target.x == 250.0
+    assert state.target.y == 200.0
+    assert state.prediction is not None
+    assert state.prediction.x == 280.0
+    assert state.prediction.y == 220.0
+    assert state.error_segment is not None
+    assert state.error_segment.start.x == 250.0
+    assert state.error_segment.start.y == 200.0
+    assert state.error_segment.end.x == 280.0
+    assert state.error_segment.end.y == 220.0
+    assert state.prediction.halo_radius > 0.0
+
+
+def test_validation_overlay_invalid_gaze_hides_prediction_but_keeps_target() -> None:
+    from desktop_demo.ui.overlay import ValidationOverlayState
+
+    overlay = ValidationOverlayState()
+    target = ValidationTarget(id="v0", x=0.25, y=0.25)
+
+    state = overlay.update_validation(
+        target=target,
+        sample=_sample(0.0, valid=False, x=280.0, y=220.0),
+        screen_width=1000.0,
+        screen_height=800.0,
+    )
+
+    assert state.target.x == 250.0
+    assert state.target.y == 200.0
+    assert state.prediction is None
+    assert state.error_segment is None
+
+
+def test_validation_overlay_keeps_bounded_prediction_trail() -> None:
+    from desktop_demo.ui.overlay import ValidationOverlayState
+
+    overlay = ValidationOverlayState(max_trail_length=2)
+    target = ValidationTarget(id="v0", x=0.25, y=0.25)
+    for x in (100.0, 200.0, 300.0):
+        overlay.update_validation(
+            target=target,
+            sample=_sample(0.9, x=x, y=x + 10.0),
+            screen_width=1000.0,
+            screen_height=800.0,
+        )
+
+    assert [(point.x, point.y) for point in overlay.trail] == [
+        (200.0, 210.0),
+        (300.0, 310.0),
+    ]
