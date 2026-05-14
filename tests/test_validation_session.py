@@ -115,3 +115,31 @@ def test_validation_computes_metrics_after_all_targets() -> None:
     assert session.metrics.sample_count == 2
     assert session.metrics.mean_error_px == 0.0
     assert session.metrics.recommendation == "excellent"
+
+
+def test_validation_session_passes_configured_grid_dimensions_to_metrics() -> None:
+    from desktop_demo.validation_session import ValidationSession, ValidationSessionState
+
+    clock = FakeClock()
+    target = validation_pattern()[2]
+    session = ValidationSession(
+        targets=[target],
+        screen_width=1600.0,
+        screen_height=900.0,
+        timing_config=config(),
+        clock=clock,
+        grid_columns=4,
+        grid_rows=3,
+    )
+    session.start()
+
+    clock.advance(1.0)
+    assert session.capture(gaze(x=300.0, y=450.0)) is False
+    clock.advance(1.1)
+    assert session.capture(gaze(x=300.0, y=450.0)) is True
+
+    assert session.state is ValidationSessionState.COMPLETE
+    assert session.metrics is not None
+    assert session.metrics.grid_columns == 4
+    assert session.metrics.grid_rows == 3
+    assert session.metrics.grid_cell_accuracy == 0.0

@@ -123,6 +123,7 @@ After calibration completes, run validation before judging tracking quality. Val
 - Mean X error: average horizontal miss distance.
 - Mean Y error: average vertical miss distance.
 - Y bias: signed vertical offset; positive means predictions are lower on screen than the target, negative means predictions are higher.
+- Grid accuracy: practical same-cell hit rate for a configurable validation grid. Defaults to `4x3`, configurable with `PUPIL_TRACKER_VALIDATION_GRID_COLUMNS` and `PUPIL_TRACKER_VALIDATION_GRID_ROWS`.
 - Recommendation: `excellent`, `good`, `usable`, or `retry`.
 
 Use the validation overlay to diagnose failures. The target dot is where you should look, the predicted dot is the calibrated estimate, and the line between them is the current error. If vertical tracking feels weaker than horizontal tracking, compare Mean X error, Mean Y error, and Y bias before changing model settings:

@@ -38,6 +38,8 @@ class ValidationSession:
         screen_height: float,
         timing_config: TimedCalibrationConfig,
         clock: Callable[[], float] | None = None,
+        grid_columns: int = 3,
+        grid_rows: int = 3,
     ) -> None:
         if not targets:
             msg = "at least one validation target is required"
@@ -45,9 +47,14 @@ class ValidationSession:
         if screen_width <= 0 or screen_height <= 0:
             msg = "screen dimensions must be positive"
             raise ValueError(msg)
+        if grid_columns <= 0 or grid_rows <= 0:
+            msg = "grid dimensions must be positive"
+            raise ValueError(msg)
         self.targets = tuple(targets)
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.grid_columns = grid_columns
+        self.grid_rows = grid_rows
         self.timing_config = timing_config
         self.clock = clock if clock is not None else monotonic
         self.state = ValidationSessionState.IDLE
@@ -149,6 +156,8 @@ class ValidationSession:
                 self._samples,
                 screen_width=self.screen_width,
                 screen_height=self.screen_height,
+                grid_columns=self.grid_columns,
+                grid_rows=self.grid_rows,
             )
             return True
         self._restart_target()

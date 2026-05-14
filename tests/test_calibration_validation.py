@@ -6,6 +6,7 @@ import pytest
 
 from pupil_tracker.calibration import (
     ValidationSample,
+    ValidationTarget,
     compute_validation_metrics,
     validation_pattern,
 )
@@ -132,11 +133,55 @@ def test_validation_metrics_report_grid_cell_accuracy_for_window_selection() -> 
     )
 
     assert metrics.grid_cell_accuracy == pytest.approx(0.75)
+    assert metrics.grid_columns == 3
+    assert metrics.grid_rows == 3
     assert metrics.per_target_grid_cell_accuracy == {
         "v0": pytest.approx(0.5),
         "v1": pytest.approx(1.0),
         "v2": pytest.approx(1.0),
     }
+
+
+def test_validation_metrics_accept_configurable_grid_dimensions() -> None:
+    target = ValidationTarget(id="custom", x=0.25, y=0.50)
+
+    three_by_three = compute_validation_metrics(
+        [ValidationSample(target=target, gaze_sample=gaze(x=300.0, y=450.0))],
+        screen_width=1600.0,
+        screen_height=900.0,
+    )
+    four_by_three = compute_validation_metrics(
+        [ValidationSample(target=target, gaze_sample=gaze(x=300.0, y=450.0))],
+        screen_width=1600.0,
+        screen_height=900.0,
+        grid_columns=4,
+        grid_rows=3,
+    )
+
+    assert three_by_three.grid_cell_accuracy == 1.0
+    assert four_by_three.grid_cell_accuracy == 0.0
+    assert four_by_three.grid_columns == 4
+    assert four_by_three.grid_rows == 3
+
+
+@pytest.mark.parametrize(
+    ("grid_columns", "grid_rows"),
+    [(0, 3), (3, 0), (-1, 3), (3, -1)],
+)
+def test_validation_metrics_reject_invalid_grid_dimensions(
+    grid_columns: int,
+    grid_rows: int,
+) -> None:
+    target = validation_pattern()[0]
+
+    with pytest.raises(ValueError, match="grid dimensions must be positive"):
+        compute_validation_metrics(
+            [ValidationSample(target=target, gaze_sample=gaze(x=250.0, y=200.0))],
+            screen_width=1000.0,
+            screen_height=800.0,
+            grid_columns=grid_columns,
+            grid_rows=grid_rows,
+        )
 
 
 @pytest.mark.parametrize(

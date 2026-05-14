@@ -49,7 +49,7 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 - [ ] Click Start Validation.
 - [ ] Look at each validation target until validation completes.
 - [ ] Confirm the validation overlay shows target dot, predicted dot, and error line.
-- [ ] Confirm validation metrics report mean error, mean X error, mean Y error, signed Y bias, grid accuracy, max error, and a recommendation.
+- [ ] Confirm validation metrics report mean error, mean X error, mean Y error, signed Y bias, configured grid accuracy (default `4x3`), max error, and a recommendation.
 - [ ] If validation recommends `retry`, recalibrate after improving lighting, camera angle, or head stability.
 - [ ] Move gaze across the screen.
 - [ ] Confirm the transparent gaze overlay appears and tracks approximately.
@@ -98,7 +98,7 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 - [ ] Confirm the target dot remains visible while validation samples are collected.
 - [ ] Confirm the predicted gaze dot appears when calibrated gaze is valid.
 - [ ] Confirm the error line connects the target dot to the predicted dot.
-- [ ] Confirm final metrics include mean error, mean X error, mean Y error, signed Y bias, grid accuracy, max error, and a recommendation.
+- [ ] Confirm final metrics include mean error, mean X error, mean Y error, signed Y bias, configured grid accuracy (default `4x3`), max error, and a recommendation.
 - [ ] Compare mean X error and mean Y error; if mean Y is much worse, continue with the vertical checks below before tuning the model.
 - [ ] Check signed Y bias: consistent positive/negative bias suggests camera angle, head pitch, or posture offset; high mean Y with near-zero bias suggests vertical noise/compression.
 - [ ] Treat `excellent` and `good` as useful for continued testing.

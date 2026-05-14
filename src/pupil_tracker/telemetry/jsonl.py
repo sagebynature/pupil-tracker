@@ -134,6 +134,8 @@ def validation_metrics_payload(metrics: ValidationMetrics) -> dict[str, Any]:
         "per_target_signed_y_error_px": dict(metrics.per_target_signed_y_error_px),
         "grid_cell_accuracy": metrics.grid_cell_accuracy,
         "per_target_grid_cell_accuracy": dict(metrics.per_target_grid_cell_accuracy),
+        "grid_columns": metrics.grid_columns,
+        "grid_rows": metrics.grid_rows,
         "recommendation": metrics.recommendation,
     }
 

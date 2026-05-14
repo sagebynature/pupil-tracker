@@ -46,6 +46,8 @@ class ValidationMetrics:
     per_target_signed_y_error_px: Mapping[str, float]
     grid_cell_accuracy: float
     per_target_grid_cell_accuracy: Mapping[str, float]
+    grid_columns: int
+    grid_rows: int
     recommendation: ValidationRecommendation
 
 
@@ -66,11 +68,16 @@ def compute_validation_metrics(
     *,
     screen_width: float,
     screen_height: float,
+    grid_columns: int = 3,
+    grid_rows: int = 3,
 ) -> ValidationMetrics:
     """Compute validation gaze error against known normalized target positions."""
 
     if screen_width <= 0 or screen_height <= 0:
         msg = "screen dimensions must be positive"
+        raise ValueError(msg)
+    if grid_columns <= 0 or grid_rows <= 0:
+        msg = "grid dimensions must be positive"
         raise ValueError(msg)
 
     errors: list[float] = []
@@ -95,12 +102,21 @@ def compute_validation_metrics(
         signed_y_errors.append(dy)
         errors_by_target[sample.target.id].append(error_px)
         signed_y_errors_by_target[sample.target.id].append(dy)
-        target_cell = _grid_cell_id(target_x, target_y, screen_width, screen_height)
+        target_cell = _grid_cell_id(
+            target_x,
+            target_y,
+            screen_width,
+            screen_height,
+            columns=grid_columns,
+            rows=grid_rows,
+        )
         gaze_cell = _grid_cell_id(
             sample.gaze_sample.x,
             sample.gaze_sample.y,
             screen_width,
             screen_height,
+            columns=grid_columns,
+            rows=grid_rows,
         )
         matches_target_cell = target_cell == gaze_cell
         grid_cell_correct.append(matches_target_cell)
@@ -132,6 +148,8 @@ def compute_validation_metrics(
             target_id: _fraction_true(target_matches)
             for target_id, target_matches in grid_cell_correct_by_target.items()
         },
+        grid_columns=grid_columns,
+        grid_rows=grid_rows,
         recommendation=_recommend(mean_error),
     )
 

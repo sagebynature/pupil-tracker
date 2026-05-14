@@ -45,6 +45,8 @@ def test_demo_config_defaults_keep_camera_preview_available(
     monkeypatch.delenv("PUPIL_TRACKER_CAMERA_ID", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_MEDIAPIPE_MODEL", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_PREVIEW_FPS", raising=False)
+    monkeypatch.delenv("PUPIL_TRACKER_VALIDATION_GRID_COLUMNS", raising=False)
+    monkeypatch.delenv("PUPIL_TRACKER_VALIDATION_GRID_ROWS", raising=False)
 
     config = DemoConfig.from_environment()
 
@@ -52,6 +54,8 @@ def test_demo_config_defaults_keep_camera_preview_available(
     assert config.model_asset_path is None
     assert config.preview_fps == 30
     assert config.preview_interval_ms == 33
+    assert config.validation_grid_columns == 4
+    assert config.validation_grid_rows == 3
 
 
 def test_demo_config_parses_camera_id_and_preview_fps(
@@ -79,6 +83,42 @@ def test_demo_config_preserves_non_numeric_camera_id(
     config = DemoConfig.from_environment()
 
     assert config.camera_id == "sample-video.mov"
+
+
+def test_demo_config_parses_validation_grid_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_VALIDATION_GRID_COLUMNS", "5")
+    monkeypatch.setenv("PUPIL_TRACKER_VALIDATION_GRID_ROWS", "4")
+
+    config = DemoConfig.from_environment()
+
+    assert config.validation_grid_columns == 5
+    assert config.validation_grid_rows == 4
+
+
+def test_demo_config_rejects_invalid_validation_grid_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_VALIDATION_GRID_COLUMNS", "0")
+
+    with pytest.raises(ValueError, match="PUPIL_TRACKER_VALIDATION_GRID_COLUMNS"):
+        DemoConfig.from_environment()
+
+
+def test_demo_config_rejects_non_numeric_validation_grid_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_VALIDATION_GRID_ROWS", "wide")
+
+    with pytest.raises(ValueError, match="PUPIL_TRACKER_VALIDATION_GRID_ROWS"):
+        DemoConfig.from_environment()
 
 
 def test_demo_config_rejects_invalid_preview_fps(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,12 +156,20 @@ def test_create_main_window_applies_config_to_camera_and_timer(
             raise AssertionError(msg)
 
     monkeypatch.setattr(demo_app, "OpenCVCamera", FakeOpenCVCamera)
-    config = DemoConfig(camera_id="sample-video.mov", preview_fps=25, model_asset_path=None)
+    config = DemoConfig(
+        camera_id="sample-video.mov",
+        preview_fps=25,
+        model_asset_path=None,
+        validation_grid_columns=5,
+        validation_grid_rows=4,
+    )
 
     window = demo_app.create_main_window(config=config)
     window.start_camera()
 
     assert created_camera_ids == ["sample-video.mov"]
     assert window.preview_timer.interval() == 40
+    assert window.validation_session.grid_columns == 5
+    assert window.validation_session.grid_rows == 4
     window.stop_camera()
     qt_app.processEvents()

@@ -33,6 +33,8 @@ def create_main_window(*, config: DemoConfig | None = None) -> MainWindow:
         camera_factory=lambda: OpenCVCamera(camera_id=resolved_config.camera_id),
         preview_interval_ms=resolved_config.preview_interval_ms,
         model_asset_path=resolved_config.model_asset_path,
+        validation_grid_columns=resolved_config.validation_grid_columns,
+        validation_grid_rows=resolved_config.validation_grid_rows,
     )
 
 

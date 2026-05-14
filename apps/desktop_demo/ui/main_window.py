@@ -160,6 +160,8 @@ class MainWindow(QMainWindow):
         gaze_runtime: GazeRuntimeLike | None = None,
         window_provider: WindowProvider | None = None,
         model_asset_path: Path | None = None,
+        validation_grid_columns: int = 4,
+        validation_grid_rows: int = 3,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -180,6 +182,11 @@ class MainWindow(QMainWindow):
         self.telemetry_path = (
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
         )
+        if validation_grid_columns <= 0 or validation_grid_rows <= 0:
+            msg = "validation grid dimensions must be positive"
+            raise ValueError(msg)
+        self.validation_grid_columns = validation_grid_columns
+        self.validation_grid_rows = validation_grid_rows
         self.telemetry_logger: JsonlLogger | None = None
         self._last_preview_qimage: QImage | None = None
 
@@ -309,6 +316,8 @@ class MainWindow(QMainWindow):
                 min_samples_per_target=10,
                 min_confidence=0.0,
             ),
+            grid_columns=self.validation_grid_columns,
+            grid_rows=self.validation_grid_rows,
         )
 
     def _show_model_setup_guidance(self, detail: str | None = None) -> None:
@@ -569,7 +578,8 @@ class MainWindow(QMainWindow):
                 f"mean X error {metrics.mean_abs_x_error_px:.2f}px | "
                 f"mean Y error {metrics.mean_abs_y_error_px:.2f}px | "
                 f"Y bias {metrics.mean_signed_y_error_px:+.2f}px | "
-                f"grid accuracy {metrics.grid_cell_accuracy:.0%} | "
+                f"grid {metrics.grid_columns}x{metrics.grid_rows} accuracy "
+                f"{metrics.grid_cell_accuracy:.0%} | "
                 f"max error {metrics.max_error_px:.2f}px | {guidance}"
             )
             self.calibration_view.validation_button.setEnabled(True)
