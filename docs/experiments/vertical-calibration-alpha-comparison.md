@@ -41,18 +41,20 @@ The `alpha=0.0` experiment made vertical accuracy substantially worse while leav
 
 ## Product-Oriented Evaluation Change
 
-Pixel error is useful for debugging, but it is stricter than the desktop selection use case requires. We added a 3x3 grid-cell accuracy metric to validation so each sample also answers:
+Pixel error is useful for debugging, but it is stricter than the desktop selection use case requires. We added a configurable grid-cell accuracy metric to validation so each sample also answers:
 
 > Did the predicted gaze land in the same coarse screen cell as the validation target?
 
-This better matches practical desktop behavior where the demo needs to identify the region or likely window, not necessarily land on the exact target pixel.
+This better matches practical desktop behavior where the demo needs to identify the region or likely window, not necessarily land on the exact target pixel. The desktop demo now defaults to a `4x3` validation grid and can be configured with `PUPIL_TRACKER_VALIDATION_GRID_COLUMNS` and `PUPIL_TRACKER_VALIDATION_GRID_ROWS`.
 
 Validation telemetry now includes:
 
 - `grid_cell_accuracy`
 - `per_target_grid_cell_accuracy`
+- `grid_columns`
+- `grid_rows`
 
-The debug label also reports grid accuracy after validation completes.
+The debug label also reports the grid size and grid accuracy after validation completes. See `docs/experiments/manual-validation-grid-and-camera-distance.md` for the later manual runs that used this metric.
 
 ## Low-Lift UI Enhancement
 
