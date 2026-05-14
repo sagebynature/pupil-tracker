@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from pupil_tracker.calibration import CalibrationFitResult
+from pupil_tracker.calibration import CalibrationFitResult, TimedCalibrationConfig
 from pupil_tracker.models import FrameMetadata, RawObservation
 from pupil_tracker.tracking import Frame
 
@@ -97,6 +97,26 @@ def valid_observation(timestamp: float = 1.0) -> RawObservation:
         valid=True,
         confidence=0.9,
         feature_vector=(timestamp, timestamp + 0.1),
+    )
+
+
+class FakeClock:
+    def __init__(self, now: float = 0.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def timed_config() -> TimedCalibrationConfig:
+    return TimedCalibrationConfig(
+        settle_seconds=1.0,
+        capture_seconds=1.0,
+        min_samples_per_target=2,
+        min_confidence=0.6,
     )
 
 
@@ -209,5 +229,66 @@ def test_completed_live_calibration_shows_fit_metrics(qt_app: QApplication) -> N
     assert model.fit_calls == 1
     assert "Calibration complete" in window.debug_label.text()
     assert "mean error 1.50px" in window.debug_label.text()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_timed_calibration_start_shows_settle_guidance(qt_app: QApplication) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.main_window import MainWindow
+
+    clock = FakeClock()
+    flow = CalibrationFlowState(samples_per_target=2)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+        timing_config=timed_config(),
+        clock=clock,
+    )
+    window = MainWindow(
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        calibration_session=session,
+    )
+
+    window.start_calibration()
+
+    assert "Settle: look at the dot" in window.calibration_view.status_label.text()
+    assert "Accepted: 0/2 | Rejected: 0" in window.calibration_view.status_label.text()
+    assert "Calibration target 1/9" in window.debug_label.text()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_timed_calibration_live_frame_shows_capture_progress(qt_app: QApplication) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.main_window import MainWindow
+
+    clock = FakeClock()
+    flow = CalibrationFlowState(samples_per_target=2)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+        timing_config=timed_config(),
+        clock=clock,
+    )
+    tracker = FakeTrackingRuntime(observations=[valid_observation()])
+    window = MainWindow(
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        tracking_runtime=tracker,
+        calibration_session=session,
+    )
+    window.start_camera()
+    window.start_calibration()
+    clock.advance(1.0)
+
+    window.update_preview_frame()
+
+    assert "Capturing:" in window.calibration_view.status_label.text()
+    assert "Accepted: 1/2 | Rejected: 0" in window.calibration_view.status_label.text()
+    assert "Calibration target 1/9" in window.debug_label.text()
     window.close()
     qt_app.processEvents()

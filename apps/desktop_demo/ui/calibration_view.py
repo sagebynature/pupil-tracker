@@ -6,7 +6,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
-from pupil_tracker.calibration import CalibrationSampleCollector, grid_pattern
+from pupil_tracker.calibration import (
+    CalibrationPhase,
+    CalibrationSampleCollector,
+    TargetQualitySummary,
+    grid_pattern,
+)
 from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObservation
 
 
@@ -197,3 +202,38 @@ class CalibrationView(QWidget):
             f"Samples: {sample_count}/{self.flow.samples_per_target}"
         )
         self.target_widget.update()
+
+    def show_quality_progress(
+        self,
+        *,
+        phase: CalibrationPhase,
+        progress: float,
+        accepted_count: int,
+        min_samples: int,
+        rejected_count: int,
+        quality: TargetQualitySummary | None,
+    ) -> None:
+        """Show timed calibration progress and target quality details."""
+
+        lines = [
+            self._phase_message(phase=phase, progress=progress),
+            f"Accepted: {accepted_count}/{min_samples} | Rejected: {rejected_count}",
+        ]
+        if quality is not None:
+            if quality.recommendation == "retry":
+                lines.append("Quality: retrying target")
+            else:
+                lines.append("Quality: good")
+        self.status_label.setText("\n".join(lines))
+        self.target_widget.update()
+
+    @staticmethod
+    def _phase_message(*, phase: CalibrationPhase, progress: float) -> str:
+        if phase is CalibrationPhase.SETTLING:
+            return "Settle: look at the dot"
+        if phase is CalibrationPhase.CAPTURING:
+            percent = round(max(0.0, min(1.0, progress)) * 100)
+            return f"Capturing: {percent}%"
+        if phase is CalibrationPhase.REVIEWING:
+            return "Reviewing target quality"
+        return "Calibration complete"

@@ -29,7 +29,7 @@ from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationVi
 from desktop_demo.ui.frame_image import bgr_ndarray_to_qimage
 from desktop_demo.ui.overlay import GazeOverlay
 from pupil_tracker import get_logger
-from pupil_tracker.calibration import PolynomialRidgeCalibrationModel
+from pupil_tracker.calibration import PolynomialRidgeCalibrationModel, TimedCalibrationConfig
 from pupil_tracker.camera import CameraError, OpenCVCamera
 from pupil_tracker.models import GazeSample, Point2D, WindowCandidate
 from pupil_tracker.platform import candidate_at_point, list_visible_windows
@@ -238,6 +238,7 @@ class MainWindow(QMainWindow):
             model=PolynomialRidgeCalibrationModel(),
             screen_width=screen_width,
             screen_height=screen_height,
+            timing_config=TimedCalibrationConfig(),
         )
 
     def _show_model_setup_guidance(self, detail: str | None = None) -> None:
@@ -303,8 +304,8 @@ class MainWindow(QMainWindow):
         if self._uses_default_calibration_session and not self.start_tracking():
             return
         self.calibration_session.start()
-        self.calibration_view.refresh()
-        self.debug_label.setText("Calibration collecting: look at the visible target")
+        self._refresh_calibration_view_status()
+        self._update_calibration_status(None)
 
     def update_preview_frame(self) -> None:
         """Read and display one preview frame from the running camera."""
@@ -373,7 +374,7 @@ class MainWindow(QMainWindow):
                         ),
                     ),
                 )
-            self.calibration_view.refresh()
+            self._refresh_calibration_view_status()
             self._update_calibration_status(status)
             return
         if self.calibration_session.state is CalibrationSessionState.COMPLETE:
@@ -432,7 +433,23 @@ class MainWindow(QMainWindow):
             f"window {candidate.app_name}{title}"
         )
 
-    def _update_calibration_status(self, status: TrackingStatus) -> None:
+    def _refresh_calibration_view_status(self) -> None:
+        """Refresh calibration labels, including timed quality progress when enabled."""
+
+        self.calibration_view.refresh()
+        session = self.calibration_session
+        if session.timing_config is None or session.state is not CalibrationSessionState.COLLECTING:
+            return
+        self.calibration_view.show_quality_progress(
+            phase=session.phase,
+            progress=session.capture_progress,
+            accepted_count=session.accepted_for_current_target,
+            min_samples=session.timing_config.min_samples_per_target,
+            rejected_count=session.rejected_for_current_target,
+            quality=session.target_quality,
+        )
+
+    def _update_calibration_status(self, status: TrackingStatus | None) -> None:
         """Update the debug label with calibration status."""
 
         session = self.calibration_session
@@ -445,12 +462,36 @@ class MainWindow(QMainWindow):
             )
         elif session.state is CalibrationSessionState.FAILED:
             self.debug_label.setText(f"Calibration failed: {session.error_message}")
-        elif status.valid:
+        elif session.timing_config is not None:
+            phase_message = self._calibration_phase_message()
+            target_index = self.calibration_view.flow.current_index + 1
+            target_total = len(self.calibration_view.flow.targets)
+            self.debug_label.setText(
+                f"Calibration target {target_index}/{target_total} | {phase_message} | "
+                f"accepted {session.accepted_for_current_target}/"
+                f"{session.timing_config.min_samples_per_target} | "
+                f"rejected {session.rejected_for_current_target}"
+            )
+        elif status is not None and status.valid:
             self.debug_label.setText(
                 f"Calibration collecting: confidence {status.confidence:.2f}"
             )
-        else:
+        elif status is not None:
             self.debug_label.setText(f"Calibration collecting: {status.message}")
+        else:
+            self.debug_label.setText("Calibration collecting: look at the visible target")
+
+    def _calibration_phase_message(self) -> str:
+        """Return concise text for the current timed calibration phase."""
+
+        phase = self.calibration_session.phase
+        if phase.name == "SETTLING":
+            return "Settle: look at the dot"
+        if phase.name == "CAPTURING":
+            return f"Capturing: {round(self.calibration_session.capture_progress * 100)}%"
+        if phase.name == "REVIEWING":
+            return "Reviewing target quality"
+        return "Calibration complete"
 
     def _update_tracking_status(self, status: TrackingStatus) -> None:
         """Update the debug label with tracker status."""
