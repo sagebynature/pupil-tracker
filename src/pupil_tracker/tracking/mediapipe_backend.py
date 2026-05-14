@@ -10,7 +10,7 @@ import mediapipe as mp
 from pupil_tracker.logging_config import get_logger
 from pupil_tracker.models import Point2D, RawObservation, Rect
 from pupil_tracker.tracking.backend import Frame
-from pupil_tracker.tracking.features import FeatureExtractionError, face_context_feature_vector
+from pupil_tracker.tracking.features import FeatureExtractionError, head_pose_feature_vector
 
 _LOGGER = get_logger("tracking.mediapipe")
 
@@ -22,6 +22,7 @@ class MediaPipeTrackerBackend:
     RIGHT_IRIS_INDICES: ClassVar[tuple[int, ...]] = (473, 474, 475, 476, 477)
     LEFT_EYE_INDICES: ClassVar[tuple[int, ...]] = (33, 133, 159, 145)
     RIGHT_EYE_INDICES: ClassVar[tuple[int, ...]] = (362, 263, 386, 374)
+    NOSE_TIP_INDEX: ClassVar[int] = 1
 
     name = "mediapipe"
 
@@ -69,13 +70,21 @@ class MediaPipeTrackerBackend:
             frame.metadata.height,
         )
 
+        nose_tip = self._landmark_point(
+            landmarks,
+            self.NOSE_TIP_INDEX,
+            frame.metadata.width,
+            frame.metadata.height,
+        )
+
         try:
-            features = face_context_feature_vector(
+            features = head_pose_feature_vector(
                 face_bounds=face_bounds,
                 left_iris=left_iris,
                 right_iris=right_iris,
                 left_eye_bounds=left_eye_bounds,
                 right_eye_bounds=right_eye_bounds,
+                nose_tip=nose_tip,
                 frame_width=frame.metadata.width,
                 frame_height=frame.metadata.height,
             )
@@ -146,6 +155,16 @@ class MediaPipeTrackerBackend:
             x=sum(point.x for point in points) * frame_width / len(points),
             y=sum(point.y for point in points) * frame_height / len(points),
         )
+
+    @staticmethod
+    def _landmark_point(
+        landmarks: Any,
+        index: int,
+        frame_width: int,
+        frame_height: int,
+    ) -> Point2D:
+        landmark = landmarks[index]
+        return Point2D(x=landmark.x * frame_width, y=landmark.y * frame_height)
 
     @staticmethod
     def _landmark_bounds(

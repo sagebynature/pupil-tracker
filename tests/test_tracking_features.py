@@ -7,6 +7,7 @@ from pupil_tracker.tracking.features import (
     FeatureExtractionError,
     eye_geometry_feature_vector,
     face_context_feature_vector,
+    head_pose_feature_vector,
     iris_feature_vector,
 )
 
@@ -102,6 +103,52 @@ def test_face_context_feature_vector_requires_valid_frame_dimensions() -> None:
             left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
             right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
             frame_width=0,
+            frame_height=300,
+        )
+
+
+def test_head_pose_proxy_features_capture_pitch_yaw_roll() -> None:
+    context_features = face_context_feature_vector(
+        face_bounds=Rect(x=20, y=30, width=160, height=90),
+        left_iris=Point2D(x=70, y=70),
+        right_iris=Point2D(x=150, y=75),
+        left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+        right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+        frame_width=400,
+        frame_height=300,
+    )
+    features = head_pose_feature_vector(
+        face_bounds=Rect(x=20, y=30, width=160, height=90),
+        left_iris=Point2D(x=70, y=70),
+        right_iris=Point2D(x=150, y=75),
+        left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+        right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+        nose_tip=Point2D(x=120, y=90),
+        frame_width=400,
+        frame_height=300,
+    )
+
+    assert len(features) == 23
+    assert features[:20] == pytest.approx(context_features)
+    assert features[20:] == pytest.approx(
+        (
+            5 / 75,  # eye-line slope / roll proxy
+            7.5 / 160,  # nose offset from eye midpoint / face width, yaw proxy
+            17.5 / 90,  # nose offset from eye midpoint / face height, pitch proxy
+        )
+    )
+
+
+def test_head_pose_feature_vector_requires_nose_tip() -> None:
+    with pytest.raises(FeatureExtractionError, match="nose tip"):
+        head_pose_feature_vector(
+            face_bounds=Rect(x=20, y=30, width=160, height=90),
+            left_iris=Point2D(x=70, y=70),
+            right_iris=Point2D(x=150, y=75),
+            left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+            right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+            nose_tip=None,
+            frame_width=400,
             frame_height=300,
         )
 

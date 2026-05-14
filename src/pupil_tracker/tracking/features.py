@@ -135,6 +135,56 @@ def face_context_feature_vector(
     )
 
 
+def head_pose_feature_vector(
+    *,
+    face_bounds: Rect,
+    left_iris: Point2D | None,
+    right_iris: Point2D | None,
+    left_eye_bounds: Rect,
+    right_eye_bounds: Rect,
+    nose_tip: Point2D | None,
+    frame_width: int,
+    frame_height: int,
+) -> tuple[float, ...]:
+    """Return face context plus cheap roll/yaw/pitch head-pose proxies."""
+
+    if nose_tip is None:
+        msg = "nose tip landmark is required"
+        raise FeatureExtractionError(msg)
+    context_features = face_context_feature_vector(
+        face_bounds=face_bounds,
+        left_iris=left_iris,
+        right_iris=right_iris,
+        left_eye_bounds=left_eye_bounds,
+        right_eye_bounds=right_eye_bounds,
+        frame_width=frame_width,
+        frame_height=frame_height,
+    )
+    left_eye_center = _rect_center(left_eye_bounds)
+    right_eye_center = _rect_center(right_eye_bounds)
+    eye_midpoint = Point2D(
+        x=(left_eye_center.x + right_eye_center.x) / 2.0,
+        y=(left_eye_center.y + right_eye_center.y) / 2.0,
+    )
+    eye_dx = right_eye_center.x - left_eye_center.x
+    if eye_dx == 0:
+        msg = "eye centers must not be vertically aligned"
+        raise FeatureExtractionError(msg)
+    roll_proxy = (right_eye_center.y - left_eye_center.y) / eye_dx
+    yaw_proxy = (nose_tip.x - eye_midpoint.x) / face_bounds.width
+    pitch_proxy = (nose_tip.y - eye_midpoint.y) / face_bounds.height
+    return (
+        *context_features,
+        roll_proxy,
+        yaw_proxy,
+        pitch_proxy,
+    )
+
+
+def _rect_center(bounds: Rect) -> Point2D:
+    return Point2D(x=bounds.x + bounds.width / 2.0, y=bounds.y + bounds.height / 2.0)
+
+
 def _validate_bounds(bounds: Rect, label: str) -> None:
     if bounds.width <= 0 or bounds.height <= 0:
         msg = f"{label} must have positive width and height"
