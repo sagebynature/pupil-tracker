@@ -15,6 +15,13 @@ from pupil_tracker.calibration.timing import (
     TimedTargetState,
     TimedTargetTimer,
 )
+from pupil_tracker.calibration.validation import (
+    ValidationMetrics,
+    ValidationSample,
+    ValidationTarget,
+    compute_validation_metrics,
+    validation_pattern,
+)
 
 __all__ = [
     "CalibrationFitResult",
@@ -27,6 +34,11 @@ __all__ = [
     "TimedCalibrationConfig",
     "TimedTargetState",
     "TimedTargetTimer",
+    "ValidationMetrics",
+    "ValidationSample",
+    "ValidationTarget",
+    "compute_validation_metrics",
     "grid_pattern",
     "summarize_target_quality",
+    "validation_pattern",
 ]
