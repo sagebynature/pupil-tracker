@@ -8,7 +8,7 @@ from typing import Any, Protocol, cast
 
 import numpy as np
 from numpy.typing import NDArray
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QImage, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -25,7 +25,11 @@ from desktop_demo.calibration_session import CalibrationSession, CalibrationSess
 from desktop_demo.gaze_runtime import GazeRuntime
 from desktop_demo.tracking_runtime import TrackingRuntime, TrackingStatus
 from desktop_demo.ui.annotations import annotate_observation
-from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
+from desktop_demo.ui.calibration_view import (
+    CalibrationFlowState,
+    CalibrationTargetWidget,
+    CalibrationView,
+)
 from desktop_demo.ui.frame_image import bgr_ndarray_to_qimage
 from desktop_demo.ui.overlay import GazeOverlay
 from desktop_demo.validation_session import ValidationSession, ValidationSessionState
@@ -205,6 +209,18 @@ class MainWindow(QMainWindow):
             if calibration_session is not None
             else self._create_default_calibration_session()
         )
+        self.calibration_target_overlay = CalibrationTargetWidget(self.calibration_view.flow)
+        self.calibration_target_overlay.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
+        )
+        self.calibration_target_overlay.setAttribute(
+            Qt.WidgetAttribute.WA_ShowWithoutActivating
+        )
+        self.calibration_target_overlay.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        )
         self.validation_session = (
             validation_session
             if validation_session is not None
@@ -245,11 +261,21 @@ class MainWindow(QMainWindow):
     def _screen_size(self) -> tuple[float, float]:
         """Return primary screen size with a safe fallback for headless tests."""
 
+        size = self._primary_screen_geometry().size()
+        return (float(size.width()), float(size.height()))
+
+    def _primary_screen_geometry(self) -> QRect:
+        """Return primary screen geometry with a safe fallback for headless tests."""
+
         screen = QApplication.primaryScreen()
         if screen is None:
-            return (1920.0, 1080.0)
-        size = screen.geometry().size()
-        return (float(size.width()), float(size.height()))
+            return QRect(0, 0, 1920, 1080)
+        return screen.geometry()
+
+    def _prepare_screen_overlay(self, overlay: QWidget) -> None:
+        """Size a top-level overlay to the primary screen coordinate space."""
+
+        overlay.setGeometry(self._primary_screen_geometry())
 
     def _create_default_calibration_session(self) -> CalibrationSession:
         """Create the default calibration session for the current screen."""
@@ -333,6 +359,7 @@ class MainWindow(QMainWindow):
             self.tracking_runtime.close()
             self.tracking_runtime = None
         self.gaze_overlay.hide()
+        self.calibration_target_overlay.hide()
         self.stop_logging()
         self.preview_label.setText("Camera preview stopped")
 
@@ -343,6 +370,8 @@ class MainWindow(QMainWindow):
             return
         self.calibration_view.validation_button.setEnabled(False)
         self.calibration_session.start()
+        self._prepare_screen_overlay(self.calibration_target_overlay)
+        self.calibration_target_overlay.show()
         self._refresh_calibration_view_status()
         self._update_calibration_status(None)
 
@@ -476,6 +505,7 @@ class MainWindow(QMainWindow):
             self._update_tracking_status(status)
             return
         if target is not None:
+            self._prepare_screen_overlay(self.gaze_overlay)
             self.gaze_overlay.update_validation_sample(
                 target=target,
                 sample=sample,
@@ -542,6 +572,8 @@ class MainWindow(QMainWindow):
     def handle_gaze_sample(self, sample: GazeSample) -> None:
         """Update the transparent overlay from one calibrated gaze sample."""
 
+        if sample.valid:
+            self._prepare_screen_overlay(self.gaze_overlay)
         self.gaze_overlay.update_sample(sample)
         if sample.valid:
             self.log_telemetry_event("gaze_sample", gaze_event_payload(sample))
@@ -554,15 +586,25 @@ class MainWindow(QMainWindow):
         """Toggle verification heatmap accumulation and rendering."""
 
         screen_width, screen_height = self._screen_size()
+        self._prepare_screen_overlay(self.gaze_overlay)
         self.gaze_overlay.configure_heatmap(
             screen_width=screen_width,
             screen_height=screen_height,
         )
         self.gaze_overlay.set_heatmap_enabled(enabled)
         self.show_heatmap_button.setChecked(enabled)
-        self.debug_label.setText(
-            "Heatmap enabled" if enabled else "Heatmap disabled"
-        )
+        self.show_heatmap_button.setText("Hide Heatmap" if enabled else "Show Heatmap")
+        if enabled:
+            if self.calibration_session.state is CalibrationSessionState.COMPLETE:
+                message = "Heatmap enabled: waiting for calibrated gaze samples"
+            else:
+                message = (
+                    "Heatmap enabled: waiting for calibrated gaze samples; "
+                    "complete calibration first"
+                )
+            self.debug_label.setText(message)
+        else:
+            self.debug_label.setText("Heatmap disabled")
 
     def clear_heatmap(self) -> None:
         """Clear verification heatmap samples."""
@@ -597,6 +639,7 @@ class MainWindow(QMainWindow):
         """Refresh calibration labels, including timed quality progress when enabled."""
 
         self.calibration_view.refresh()
+        self.calibration_target_overlay.update()
         session = self.calibration_session
         if session.timing_config is None or session.state is not CalibrationSessionState.COLLECTING:
             return
@@ -615,6 +658,7 @@ class MainWindow(QMainWindow):
         session = self.calibration_session
         if session.state is CalibrationSessionState.COMPLETE and session.fit_result is not None:
             result = session.fit_result
+            self.calibration_target_overlay.hide()
             self.calibration_view.validation_button.setEnabled(True)
             self.debug_label.setText(
                 "Calibration complete: "
@@ -622,6 +666,7 @@ class MainWindow(QMainWindow):
                 f"max error {result.max_error_px:.2f}px | Start validation"
             )
         elif session.state is CalibrationSessionState.FAILED:
+            self.calibration_target_overlay.hide()
             self.debug_label.setText(f"Calibration failed: {session.error_message}")
         elif session.timing_config is not None:
             phase_message = self._calibration_phase_message()
@@ -699,4 +744,5 @@ class MainWindow(QMainWindow):
             self.tracking_runtime.close()
             self.tracking_runtime = None
         self.gaze_overlay.close()
+        self.calibration_target_overlay.close()
         super().closeEvent(event)

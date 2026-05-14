@@ -10,7 +10,7 @@ from typing import cast
 
 import numpy as np
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication
 
@@ -135,6 +135,24 @@ def test_overlay_is_clickthrough_and_does_not_activate(qt_app: QApplication) -> 
 
     assert window.gaze_overlay.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     assert window.gaze_overlay.testAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+    window.close()
+    qt_app.processEvents()
+
+
+def test_enabling_heatmap_prepares_full_screen_overlay_and_guidance(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    window = MainWindow(camera_factory=FakeCamera)
+
+    window.set_heatmap_enabled(True)
+
+    screen = QApplication.primaryScreen()
+    expected_geometry = screen.geometry() if screen is not None else QRect(0, 0, 1920, 1080)
+    assert window.gaze_overlay.geometry() == expected_geometry
+    assert window.show_heatmap_button.text() == "Hide Heatmap"
+    assert "waiting for calibrated gaze" in window.debug_label.text()
     window.close()
     qt_app.processEvents()
 

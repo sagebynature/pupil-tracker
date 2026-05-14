@@ -41,7 +41,7 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 - [ ] Center your face in the preview.
 - [ ] Confirm tracker annotations appear when face/iris landmarks are detected.
 - [ ] Click Start Calibration.
-- [ ] Follow the visible calibration targets from `r0c0` through `r2c2`.
+- [ ] Follow the fullscreen calibration targets from `r0c0` through `r2c2`.
 - [ ] Confirm each target shows a Settle phase before samples are counted.
 - [ ] Confirm each target shows a Capture phase with accepted/rejected sample counts.
 - [ ] Confirm low-confidence, lost-face, or missing-feature observations do not advance the target.
@@ -80,6 +80,8 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 ## Calibration
 
 - [ ] Start the 9-point calibration flow.
+- [ ] Confirm the target display covers the primary monitor, not just the embedded control panel.
+- [ ] Confirm outer targets remain inset from the physical edges so they are stable to fixate.
 - [ ] Follow each target in row-major order from `r0c0` through `r2c2`.
 - [ ] During Settle, confirm samples are not counted yet.
 - [ ] During Capture, confirm valid/confident observations increase the accepted count.

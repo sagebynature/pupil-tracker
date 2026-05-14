@@ -10,6 +10,7 @@ from typing import cast
 
 import numpy as np
 import pytest
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtWidgets import QApplication
 
 from pupil_tracker.calibration import (
@@ -161,6 +162,36 @@ def validation_config() -> TimedCalibrationConfig:
     )
 
 
+def test_start_calibration_shows_full_screen_target_overlay(qt_app: QApplication) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.main_window import MainWindow
+
+    flow = CalibrationFlowState(samples_per_target=1)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+    )
+    window = MainWindow(
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        calibration_session=session,
+    )
+
+    window.start_calibration()
+
+    screen = QApplication.primaryScreen()
+    expected_geometry = screen.geometry() if screen is not None else QRect(0, 0, 1920, 1080)
+    assert window.calibration_target_overlay.geometry() == expected_geometry
+    assert window.calibration_target_overlay.isVisible()
+    assert window.calibration_target_overlay.testAttribute(
+        Qt.WidgetAttribute.WA_TransparentForMouseEvents
+    )
+    assert window.calibration_target_overlay.flow is flow
+    window.close()
+    qt_app.processEvents()
+
+
 def test_start_calibration_starts_session_and_refreshes_view(qt_app: QApplication) -> None:
     from desktop_demo.calibration_session import CalibrationSession
     from desktop_demo.ui.main_window import MainWindow
@@ -270,6 +301,7 @@ def test_completed_live_calibration_shows_fit_metrics(qt_app: QApplication) -> N
     assert model.fit_calls == 1
     assert "Calibration complete" in window.debug_label.text()
     assert "mean error 1.50px" in window.debug_label.text()
+    assert not window.calibration_target_overlay.isVisible()
     window.close()
     qt_app.processEvents()
 

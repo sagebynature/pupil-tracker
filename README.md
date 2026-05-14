@@ -96,7 +96,7 @@ Expected manual path:
 
 1. Click Start Camera and confirm live preview.
 2. Center your face and confirm tracker annotations appear.
-3. Click Start Calibration and follow the 9 visible targets.
+3. Click Start Calibration and follow the 9 fullscreen targets.
 4. Hold gaze through each target's Settle and Capture phases.
 5. Confirm calibration completes with fit metrics.
 6. Click Start Validation and follow the validation targets.
@@ -123,6 +123,8 @@ After calibration completes, run validation before judging tracking quality. Val
 - Recommendation: `excellent`, `good`, `usable`, or `retry`.
 
 Use the validation overlay to diagnose failures. The target dot is where you should look, the predicted dot is the calibrated estimate, and the line between them is the current error. If the recommendation is `retry`, improve lighting/camera position, reduce head movement, and recalibrate.
+
+Calibration targets are shown fullscreen because the fitted model maps observations to full-monitor coordinates. The outer 9-point targets remain inset from the physical edges so they sample the usable screen area without forcing hard-to-hold edge fixations.
 
 For longer live checks, enable Show Heatmap and stare at fixed points. The heatmap should cluster where you hold your gaze. Use Clear Heatmap between trials.
 
