@@ -11,6 +11,7 @@ class DemoMode(Enum):
     STOPPED = "stopped"
     PREVIEWING = "previewing"
     CALIBRATING = "calibrating"
+    VALIDATING = "validating"
     TRACKING = "calibrated_tracking"
     ERROR = "error"
 
@@ -47,7 +48,7 @@ class DemoStateMachine:
     def calibration_started(self) -> None:
         """Move from preview/tracking into calibration collection."""
 
-        if self.mode not in {DemoMode.PREVIEWING, DemoMode.TRACKING}:
+        if self.mode not in {DemoMode.PREVIEWING, DemoMode.TRACKING, DemoMode.VALIDATING}:
             msg = f"cannot start calibration while {self.mode.value}"
             raise InvalidDemoStateTransition(msg)
         self.mode = DemoMode.CALIBRATING
@@ -59,8 +60,26 @@ class DemoStateMachine:
         if self.mode is not DemoMode.CALIBRATING:
             msg = f"cannot complete calibration while {self.mode.value}"
             raise InvalidDemoStateTransition(msg)
+        self.mode = DemoMode.VALIDATING
+        self.error_message = None
+
+    def validation_passed(self) -> None:
+        """Move from validation into trusted calibrated tracking."""
+
+        if self.mode is not DemoMode.VALIDATING:
+            msg = f"cannot pass validation while {self.mode.value}"
+            raise InvalidDemoStateTransition(msg)
         self.mode = DemoMode.TRACKING
         self.error_message = None
+
+    def validation_failed(self, message: str) -> None:
+        """Record validation failure and require calibration/validation recovery."""
+
+        if self.mode is not DemoMode.VALIDATING:
+            msg = f"cannot fail validation while {self.mode.value}"
+            raise InvalidDemoStateTransition(msg)
+        self.mode = DemoMode.ERROR
+        self.error_message = message
 
     def calibration_failed(self, message: str) -> None:
         """Record a calibration failure and move to error mode."""

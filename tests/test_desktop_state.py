@@ -21,7 +21,7 @@ def test_state_starts_stopped() -> None:
     assert state.error_message is None
 
 
-def test_state_transitions_from_calibrating_to_tracking_after_fit() -> None:
+def test_state_transitions_from_calibrating_to_validation_after_fit() -> None:
     from desktop_demo.state import DemoMode, DemoStateMachine
 
     state = DemoStateMachine()
@@ -29,7 +29,39 @@ def test_state_transitions_from_calibrating_to_tracking_after_fit() -> None:
     state.calibration_started()
     state.calibration_completed()
 
+    assert state.mode is DemoMode.VALIDATING
+    assert state.error_message is None
+
+
+def test_validation_pass_transitions_to_tracking() -> None:
+    from desktop_demo.state import DemoMode, DemoStateMachine
+
+    state = DemoStateMachine()
+    state.camera_started()
+    state.calibration_started()
+    state.calibration_completed()
+    state.validation_passed()
+
     assert state.mode is DemoMode.TRACKING
+    assert state.error_message is None
+
+
+def test_validation_failure_records_error_and_allows_calibration_retry() -> None:
+    from desktop_demo.state import DemoMode, DemoStateMachine
+
+    state = DemoStateMachine()
+    state.camera_started()
+    state.calibration_started()
+    state.calibration_completed()
+    state.validation_failed("mean error 250px")
+
+    assert state.mode is DemoMode.ERROR
+    assert state.error_message == "mean error 250px"
+
+    state.camera_started()
+    state.calibration_started()
+
+    assert state.mode is DemoMode.CALIBRATING
     assert state.error_message is None
 
 
