@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
@@ -18,12 +20,19 @@ from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObserv
 class CalibrationFlowState:
     """Pure state machine for the 9-point calibration flow."""
 
-    def __init__(self, samples_per_target: int = 5) -> None:
+    def __init__(
+        self,
+        samples_per_target: int = 5,
+        targets: Sequence[CalibrationTarget] | None = None,
+    ) -> None:
         if samples_per_target <= 0:
             msg = "samples_per_target must be positive"
             raise ValueError(msg)
         self.samples_per_target = samples_per_target
-        self.targets = grid_pattern(3, 3)
+        self.targets = tuple(targets) if targets is not None else tuple(grid_pattern(3, 3))
+        if not self.targets:
+            msg = "targets must not be empty"
+            raise ValueError(msg)
         self.current_index = 0
         self._collector = CalibrationSampleCollector()
 
@@ -198,7 +207,8 @@ class CalibrationView(QWidget):
             return
 
         self.target_label.setText(
-            f"Target {self.flow.current_index + 1}/9: {target.id} ({target.x:.2f}, {target.y:.2f})"
+            f"Target {self.flow.current_index + 1}/{len(self.flow.targets)}: "
+            f"{target.id} ({target.x:.2f}, {target.y:.2f})"
         )
         sample_count = len(self.flow.samples_for_current_target())
         self.status_label.setText(

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pupil_tracker.models import RawObservation
+from pupil_tracker.models import CalibrationTarget, RawObservation
 
 if TYPE_CHECKING:
     from desktop_demo.ui.calibration_view import CalibrationFlowState
@@ -41,6 +41,21 @@ def test_initial_target_is_first_nine_point_target() -> None:
     assert target.y == 0.1
     assert flow.current_index == 0
     assert not flow.is_complete
+
+
+def test_flow_accepts_custom_calibration_targets() -> None:
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+
+    targets = [
+        CalibrationTarget(id="top", x=0.5, y=0.1),
+        CalibrationTarget(id="bottom", x=0.5, y=0.9),
+    ]
+    flow = CalibrationFlowState(samples_per_target=1, targets=targets)
+
+    assert flow.targets == tuple(targets)
+    assert flow.current_target == targets[0]
+    assert flow.capture_observation(_valid_observation())
+    assert flow.current_target == targets[1]
 
 
 def test_advancing_after_required_valid_samples_moves_to_next_target() -> None:

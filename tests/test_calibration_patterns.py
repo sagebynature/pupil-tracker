@@ -1,6 +1,6 @@
 import pytest
 
-from pupil_tracker.calibration.patterns import grid_pattern
+from pupil_tracker.calibration.patterns import grid_pattern, vertical_grid_pattern
 
 
 def test_grid_pattern_returns_stable_nine_point_grid() -> None:
@@ -47,6 +47,40 @@ def test_grid_pattern_supports_single_row_or_column() -> None:
         pytest.approx((0.5, 0.5)),
         pytest.approx((0.5, 0.8)),
     ]
+
+
+def test_vertical_grid_pattern_returns_inset_three_by_five_targets() -> None:
+    targets = vertical_grid_pattern(margin=0.1)
+
+    assert len(targets) == 15
+    assert [target.id for target in targets] == [
+        "r0c0",
+        "r0c1",
+        "r0c2",
+        "r1c0",
+        "r1c1",
+        "r1c2",
+        "r2c0",
+        "r2c1",
+        "r2c2",
+        "r3c0",
+        "r3c1",
+        "r3c2",
+        "r4c0",
+        "r4c1",
+        "r4c2",
+    ]
+    assert [(target.x, target.y) for target in targets[0:3]] == [
+        pytest.approx((0.1, 0.1)),
+        pytest.approx((0.5, 0.1)),
+        pytest.approx((0.9, 0.1)),
+    ]
+    assert [(target.x, target.y) for target in targets[-3:]] == [
+        pytest.approx((0.1, 0.9)),
+        pytest.approx((0.5, 0.9)),
+        pytest.approx((0.9, 0.9)),
+    ]
+    assert targets[6].y == pytest.approx(0.5)
 
 
 @pytest.mark.parametrize(

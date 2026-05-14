@@ -26,6 +26,12 @@ def grid_pattern(rows: int, cols: int, margin: float = 0.1) -> list[CalibrationT
     return targets
 
 
+def vertical_grid_pattern(margin: float = 0.1) -> list[CalibrationTarget]:
+    """Return a denser 3-column by 5-row pattern for vertical accuracy checks."""
+
+    return grid_pattern(rows=5, cols=3, margin=margin)
+
+
 def _coordinate(index: int, count: int, margin: float) -> float:
     if count == 1:
         return 0.5
