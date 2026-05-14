@@ -10,7 +10,7 @@ import mediapipe as mp
 from pupil_tracker.logging_config import get_logger
 from pupil_tracker.models import Point2D, RawObservation, Rect
 from pupil_tracker.tracking.backend import Frame
-from pupil_tracker.tracking.features import FeatureExtractionError, iris_feature_vector
+from pupil_tracker.tracking.features import FeatureExtractionError, eye_geometry_feature_vector
 
 _LOGGER = get_logger("tracking.mediapipe")
 
@@ -20,6 +20,8 @@ class MediaPipeTrackerBackend:
 
     LEFT_IRIS_INDICES: ClassVar[tuple[int, ...]] = (468, 469, 470, 471, 472)
     RIGHT_IRIS_INDICES: ClassVar[tuple[int, ...]] = (473, 474, 475, 476, 477)
+    LEFT_EYE_INDICES: ClassVar[tuple[int, ...]] = (33, 133, 159, 145)
+    RIGHT_EYE_INDICES: ClassVar[tuple[int, ...]] = (362, 263, 386, 374)
 
     name = "mediapipe"
 
@@ -54,9 +56,27 @@ class MediaPipeTrackerBackend:
             frame.metadata.width,
             frame.metadata.height,
         )
+        left_eye_bounds = self._landmark_bounds(
+            landmarks,
+            self.LEFT_EYE_INDICES,
+            frame.metadata.width,
+            frame.metadata.height,
+        )
+        right_eye_bounds = self._landmark_bounds(
+            landmarks,
+            self.RIGHT_EYE_INDICES,
+            frame.metadata.width,
+            frame.metadata.height,
+        )
 
         try:
-            features = iris_feature_vector(face_bounds, left_iris, right_iris)
+            features = eye_geometry_feature_vector(
+                face_bounds=face_bounds,
+                left_iris=left_iris,
+                right_iris=right_iris,
+                left_eye_bounds=left_eye_bounds,
+                right_eye_bounds=right_eye_bounds,
+            )
         except FeatureExtractionError as error:
             _LOGGER.debug("failed to extract MediaPipe features: %s", error)
             return RawObservation.invalid(
@@ -121,6 +141,25 @@ class MediaPipeTrackerBackend:
         return Point2D(
             x=sum(point.x for point in points) * frame_width / len(points),
             y=sum(point.y for point in points) * frame_height / len(points),
+        )
+
+    @staticmethod
+    def _landmark_bounds(
+        landmarks: Any,
+        indices: tuple[int, ...],
+        frame_width: int,
+        frame_height: int,
+    ) -> Rect:
+        points = [landmarks[index] for index in indices]
+        xs = [point.x * frame_width for point in points]
+        ys = [point.y * frame_height for point in points]
+        min_x = min(xs)
+        min_y = min(ys)
+        return Rect(
+            x=min_x,
+            y=min_y,
+            width=max(xs) - min_x,
+            height=max(ys) - min_y,
         )
 
 

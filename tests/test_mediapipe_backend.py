@@ -57,6 +57,28 @@ def _landmarks() -> list[FakeLandmark]:
         landmarks[index] = FakeLandmark(x=0.3, y=0.4)
     for index in MediaPipeTrackerBackend.RIGHT_IRIS_INDICES:
         landmarks[index] = FakeLandmark(x=0.7, y=0.5)
+    for index, point in zip(
+        MediaPipeTrackerBackend.LEFT_EYE_INDICES,
+        (
+            FakeLandmark(x=0.2, y=0.3),
+            FakeLandmark(x=0.4, y=0.3),
+            FakeLandmark(x=0.3, y=0.3),
+            FakeLandmark(x=0.3, y=0.5),
+        ),
+        strict=True,
+    ):
+        landmarks[index] = point
+    for index, point in zip(
+        MediaPipeTrackerBackend.RIGHT_EYE_INDICES,
+        (
+            FakeLandmark(x=0.6, y=0.4),
+            FakeLandmark(x=0.8, y=0.4),
+            FakeLandmark(x=0.7, y=0.4),
+            FakeLandmark(x=0.7, y=0.6),
+        ),
+        strict=True,
+    ):
+        landmarks[index] = point
     return landmarks
 
 
@@ -100,7 +122,22 @@ def test_mocked_landmarks_produce_valid_observation_with_stable_feature_vector()
     assert observation.right_iris.x == pytest.approx(70.0)
     assert observation.right_iris.y == pytest.approx(50.0)
     assert observation.feature_vector == pytest.approx(
-        (0.25, 1 / 3, 0.75, 0.5, 0.5, 5 / 12)
+        (
+            0.25,
+            1 / 3,
+            0.75,
+            0.5,
+            0.5,
+            5 / 12,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            1 / 3,
+            1 / 3,
+            0.5,
+            0.0,
+        )
     )
 
 

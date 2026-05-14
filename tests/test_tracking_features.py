@@ -3,7 +3,11 @@
 import pytest
 
 from pupil_tracker.models import Point2D, Rect
-from pupil_tracker.tracking.features import FeatureExtractionError, iris_feature_vector
+from pupil_tracker.tracking.features import (
+    FeatureExtractionError,
+    eye_geometry_feature_vector,
+    iris_feature_vector,
+)
 
 
 def test_iris_feature_vector_length_is_stable() -> None:
@@ -24,6 +28,47 @@ def test_iris_centers_are_normalized_relative_to_face_bounds() -> None:
     )
 
     assert features == pytest.approx((0.25, 0.3, 0.75, 0.4, 0.5, 0.35))
+
+
+def test_eye_geometry_feature_vector_adds_vertical_eye_relative_features() -> None:
+    features = eye_geometry_feature_vector(
+        face_bounds=Rect(x=10, y=20, width=80, height=60),
+        left_iris=Point2D(x=30, y=40),
+        right_iris=Point2D(x=70, y=50),
+        left_eye_bounds=Rect(x=20, y=30, width=20, height=20),
+        right_eye_bounds=Rect(x=60, y=40, width=20, height=20),
+    )
+
+    assert len(features) == 14
+    assert features == pytest.approx(
+        (
+            0.25,
+            1 / 3,
+            0.75,
+            0.5,
+            0.5,
+            5 / 12,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            1 / 3,
+            1 / 3,
+            0.5,
+            0.0,
+        )
+    )
+
+
+def test_eye_geometry_feature_vector_requires_valid_eye_bounds() -> None:
+    with pytest.raises(FeatureExtractionError, match="left eye bounds"):
+        eye_geometry_feature_vector(
+            face_bounds=Rect(x=10, y=20, width=80, height=60),
+            left_iris=Point2D(x=30, y=40),
+            right_iris=Point2D(x=70, y=50),
+            left_eye_bounds=Rect(x=20, y=30, width=0, height=20),
+            right_eye_bounds=Rect(x=60, y=40, width=20, height=20),
+        )
 
 
 def test_missing_left_iris_raises_feature_extraction_error() -> None:
