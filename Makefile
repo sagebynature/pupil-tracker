@@ -27,13 +27,13 @@ test:
 	$(PYTEST) -v
 
 typecheck:
-	$(TY) check src apps tests
+	$(TY) check src apps tests tools
 
 lint:
-	$(RUFF) check src apps tests
+	$(RUFF) check src apps tests tools
 
 format:
-	$(RUFF) format src apps tests
+	$(RUFF) format src apps tests tools
 
 check: lint typecheck test
 

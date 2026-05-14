@@ -37,7 +37,7 @@ addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
-src = ["src", "apps", "tests"]
+src = ["src", "apps", "tests", "tools"]
 target-version = "py311"
 
 [tool.ruff.lint]
@@ -52,4 +52,4 @@ line-ending = "auto"
 [tool.ty.environment]
 python-version = "3.11"
 python-platform = "macos"
-root = ["./src", "./apps", "./tests"]
+root = ["./src", "./apps", "./tests", "./tools"]
