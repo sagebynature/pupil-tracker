@@ -1,5 +1,10 @@
 """Calibration utilities for target generation, samples, and gaze mapping."""
 
+from pupil_tracker.calibration.feature_diagnostics import (
+    FeatureDiagnosticsSummary,
+    TargetFeatureSummary,
+    summarize_feature_diagnostics,
+)
 from pupil_tracker.calibration.model import (
     CalibrationFitResult,
     LinearRidgeCalibrationModel,
@@ -33,8 +38,10 @@ __all__ = [
     "CalibrationQualityFilter",
     "CalibrationSampleCollector",
     "CalibrationSampleDecision",
+    "FeatureDiagnosticsSummary",
     "LinearRidgeCalibrationModel",
     "PolynomialRidgeCalibrationModel",
+    "TargetFeatureSummary",
     "TargetQualitySummary",
     "TimedCalibrationConfig",
     "TimedTargetState",
@@ -44,6 +51,7 @@ __all__ = [
     "ValidationTarget",
     "compute_validation_metrics",
     "grid_pattern",
+    "summarize_feature_diagnostics",
     "summarize_target_quality",
     "validation_pattern",
     "vertical_grid_pattern",
