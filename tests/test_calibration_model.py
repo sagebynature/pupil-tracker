@@ -69,6 +69,7 @@ def test_predict_maps_synthetic_observation_to_screen_coordinates() -> None:
 
 def test_linear_ridge_model_uses_safer_first_order_mapping() -> None:
     model = LinearRidgeCalibrationModel(alpha=0.0)
+    assert model.alpha == 0.0
     model.fit(_grid_samples(), screen_width=1000, screen_height=500)
 
     prediction = model.predict(

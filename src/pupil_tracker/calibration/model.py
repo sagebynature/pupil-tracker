@@ -48,6 +48,12 @@ class PolynomialRidgeCalibrationModel:
         self._alpha = alpha
         self._pipeline: _CalibrationPipeline | None = None
 
+    @property
+    def alpha(self) -> float:
+        """Return the ridge regularization strength used by this model."""
+
+        return self._alpha
+
     def fit(
         self,
         samples: Sequence[CalibrationSample],

@@ -393,7 +393,7 @@ class MainWindow(QMainWindow):
         screen_width, screen_height = self._screen_size()
         self.calibration_session = CalibrationSession(
             flow=flow,
-            model=LinearRidgeCalibrationModel(),
+            model=LinearRidgeCalibrationModel(alpha=0.0),
             screen_width=screen_width,
             screen_height=screen_height,
             timing_config=TimedCalibrationConfig(),
