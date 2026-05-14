@@ -9,7 +9,12 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
-from pupil_tracker.calibration import TargetQualitySummary, ValidationMetrics, ValidationTarget
+from pupil_tracker.calibration import (
+    FeatureDiagnosticsSummary,
+    TargetQualitySummary,
+    ValidationMetrics,
+    ValidationTarget,
+)
 from pupil_tracker.logging_config import get_logger
 from pupil_tracker.models import CalibrationTarget, GazeSample, RawObservation, WindowCandidate
 
@@ -116,6 +121,25 @@ def calibration_target_quality_payload(
         "mean_confidence": quality.mean_confidence,
         "meets_min_samples": quality.meets_min_samples,
         "recommendation": quality.recommendation,
+    }
+
+
+def feature_diagnostics_payload(summary: FeatureDiagnosticsSummary) -> dict[str, Any]:
+    """Serialize scalar calibration feature diagnostics without raw samples."""
+
+    return {
+        "feature_count": summary.feature_count,
+        "targets": {
+            target_id: {
+                "target_id": target_summary.target_id,
+                "target_x": target_summary.target_x,
+                "target_y": target_summary.target_y,
+                "accepted_count": target_summary.accepted_count,
+                "feature_mean": list(target_summary.feature_mean),
+                "feature_std": list(target_summary.feature_std),
+            }
+            for target_id, target_summary in summary.target_summaries.items()
+        },
     }
 
 

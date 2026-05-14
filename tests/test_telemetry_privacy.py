@@ -13,12 +13,18 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from pupil_tracker.calibration import TargetQualitySummary, ValidationMetrics
+from pupil_tracker.calibration import (
+    FeatureDiagnosticsSummary,
+    TargetFeatureSummary,
+    TargetQualitySummary,
+    ValidationMetrics,
+)
 from pupil_tracker.models import CalibrationTarget, GazeSample, Rect, WindowCandidate
 from pupil_tracker.telemetry import (
     JsonlLogger,
     calibration_event_payload,
     calibration_target_quality_payload,
+    feature_diagnostics_payload,
     gaze_event_payload,
     validation_metrics_payload,
     window_candidate_payload,
@@ -31,6 +37,42 @@ if str(APPS_ROOT) not in sys.path:
 
 def _read_events(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_feature_diagnostics_payload_is_scalar_only() -> None:
+    summary = FeatureDiagnosticsSummary(
+        feature_count=2,
+        target_summaries={
+            "top": TargetFeatureSummary(
+                target_id="top",
+                target_x=0.5,
+                target_y=0.2,
+                accepted_count=2,
+                feature_mean=(2.0, 3.0),
+                feature_std=(1.0, 1.0),
+            )
+        },
+    )
+
+    payload = feature_diagnostics_payload(summary)
+
+    assert payload == {
+        "feature_count": 2,
+        "targets": {
+            "top": {
+                "target_id": "top",
+                "target_x": 0.5,
+                "target_y": 0.2,
+                "accepted_count": 2,
+                "feature_mean": [2.0, 3.0],
+                "feature_std": [1.0, 1.0],
+            }
+        },
+    }
+    payload_json = json.dumps(payload)
+    assert "image" not in payload_json
+    assert "frame" not in payload_json
+    assert "feature_vector" not in payload_json
 
 
 @pytest.fixture
