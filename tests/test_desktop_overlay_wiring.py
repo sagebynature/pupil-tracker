@@ -135,6 +135,7 @@ def test_overlay_is_clickthrough_and_does_not_activate(qt_app: QApplication) -> 
 
     assert window.gaze_overlay.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     assert window.gaze_overlay.testAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+    assert window.gaze_overlay.windowFlags() & Qt.WindowType.WindowTransparentForInput
     window.close()
     qt_app.processEvents()
 

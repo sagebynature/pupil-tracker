@@ -187,6 +187,10 @@ def test_start_calibration_shows_full_screen_target_overlay(qt_app: QApplication
     assert window.calibration_target_overlay.testAttribute(
         Qt.WidgetAttribute.WA_TransparentForMouseEvents
     )
+    assert (
+        window.calibration_target_overlay.windowFlags()
+        & Qt.WindowType.WindowTransparentForInput
+    )
     assert window.calibration_target_overlay.flow is flow
     window.close()
     qt_app.processEvents()

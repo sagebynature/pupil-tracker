@@ -213,6 +213,7 @@ class MainWindow(QMainWindow):
         self.calibration_target_overlay.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.WindowTransparentForInput
             | Qt.WindowType.Tool
         )
         self.calibration_target_overlay.setAttribute(
