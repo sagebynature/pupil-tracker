@@ -1,10 +1,12 @@
-.PHONY: help sync test typecheck lint format check run-demo clean
+.PHONY: help sync test typecheck lint format check download-model test-model run-demo clean
 
 UV ?= uv
 PYTHON ?= $(UV) run python
 PYTEST ?= $(UV) run pytest
 RUFF ?= $(UV) run ruff
 TY ?= $(UV) run ty
+MODEL_DIR ?= models
+FACE_LANDMARKER_MODEL_URL ?= https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
 
 help:
 	@echo "Available targets:"
@@ -14,6 +16,7 @@ help:
 	@echo "  lint       Run ruff lint checks"
 	@echo "  format     Format Python files with ruff"
 	@echo "  check      Run lint, typecheck, and tests"
+	@echo "  download-model  Download the MediaPipe FaceLandmarker model"
 	@echo "  run-demo   Launch the desktop demo"
 	@echo "  clean      Remove local caches"
 
@@ -33,6 +36,18 @@ format:
 	$(RUFF) format src apps tests
 
 check: lint typecheck test
+
+download-model: $(MODEL_DIR)/face_landmarker.task
+	@echo "Downloaded MediaPipe FaceLandmarker model: $<"
+	@echo "Run with: PUPIL_TRACKER_MEDIAPIPE_MODEL=$$(pwd)/$< make run-demo"
+
+$(MODEL_DIR)/face_landmarker.task:
+	mkdir -p $(MODEL_DIR)
+	curl -L --fail --output $@.tmp $(FACE_LANDMARKER_MODEL_URL)
+	mv $@.tmp $@
+
+test-model:
+	@test -s $(MODEL_DIR)/face_landmarker.task
 
 run-demo:
 	$(PYTHON) apps/desktop_demo/main.py
