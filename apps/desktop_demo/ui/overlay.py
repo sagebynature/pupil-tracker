@@ -179,6 +179,7 @@ class GazeOverlay(QWidget):
     def __init__(self, state: OverlayState | None = None) -> None:
         super().__init__()
         self.state = state if state is not None else OverlayState()
+        self.validation_state = ValidationOverlayState()
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -194,19 +195,59 @@ class GazeOverlay(QWidget):
         self.state.update(sample)
         self.update()
 
+    def update_validation_sample(
+        self,
+        *,
+        target: ValidationTarget,
+        sample: GazeSample,
+        screen_width: float,
+        screen_height: float,
+    ) -> None:
+        """Update overlay drawing state for validation target and prediction."""
+
+        self.validation_state.update_validation(
+            target=target,
+            sample=sample,
+            screen_width=screen_width,
+            screen_height=screen_height,
+        )
+        self.update()
+
     def paintEvent(self, event: object) -> None:
         """Draw current gaze cursor and bounded debug trail."""
 
         del event
-        current = self.state.current
-        if current is None or not current.visible:
-            return
-
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        _draw_trail(painter, self.state.trail)
-        _draw_cursor(painter, current)
+        validation_current = self.validation_state.current
+        if validation_current is not None:
+            _draw_validation(painter, validation_current, self.validation_state.trail)
+            painter.end()
+            return
+        current = self.state.current
+        if current is not None and current.visible:
+            _draw_trail(painter, self.state.trail)
+            _draw_cursor(painter, current)
         painter.end()
+
+
+def _draw_validation(
+    painter: QPainter,
+    current: ValidationRenderState,
+    trail: Sequence[Point2D],
+) -> None:
+    _draw_trail(painter, trail)
+    if current.error_segment is not None:
+        painter.setPen(QPen(QColor(255, 120, 60, 180), 2.0))
+        painter.drawLine(
+            QPointF(current.error_segment.start.x, current.error_segment.start.y),
+            QPointF(current.error_segment.end.x, current.error_segment.end.y),
+        )
+    painter.setPen(QPen(QColor(255, 255, 255, 230), 3.0))
+    painter.setBrush(QColor(60, 140, 255, 190))
+    painter.drawEllipse(QPointF(current.target.x, current.target.y), 8.0, 8.0)
+    if current.prediction is not None:
+        _draw_cursor(painter, current.prediction)
 
 
 def _draw_cursor(painter: QPainter, current: CursorRenderState) -> None:

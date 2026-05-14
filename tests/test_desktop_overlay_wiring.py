@@ -11,8 +11,10 @@ from typing import cast
 import numpy as np
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication
 
+from pupil_tracker.calibration import ValidationTarget
 from pupil_tracker.models import FrameMetadata, GazeSample, RawObservation
 from pupil_tracker.tracking import Frame
 
@@ -158,4 +160,49 @@ def test_live_calibrated_gaze_updates_overlay(qt_app: QApplication) -> None:
     assert window.gaze_overlay.state.current.y == sample.y
     assert window.gaze_overlay.isVisible() is True
     window.close()
+    qt_app.processEvents()
+
+
+def test_validation_sample_updates_overlay_state(qt_app: QApplication) -> None:
+    from desktop_demo.ui.overlay import GazeOverlay
+
+    overlay = GazeOverlay()
+    target = ValidationTarget(id="v0", x=0.25, y=0.25)
+
+    overlay.update_validation_sample(
+        target=target,
+        sample=valid_sample(),
+        screen_width=400.0,
+        screen_height=400.0,
+    )
+
+    assert overlay.validation_state.current is not None
+    assert overlay.validation_state.current.target.x == 100.0
+    assert overlay.validation_state.current.target.y == 100.0
+    assert overlay.validation_state.current.prediction is not None
+    assert overlay.validation_state.current.prediction.x == 100.0
+    assert overlay.validation_state.current.prediction.y == 200.0
+    assert overlay.validation_state.current.error_segment is not None
+    overlay.close()
+    qt_app.processEvents()
+
+
+def test_validation_overlay_render_marks_target_pixel(qt_app: QApplication) -> None:
+    from desktop_demo.ui.overlay import GazeOverlay
+
+    overlay = GazeOverlay()
+    overlay.resize(400, 400)
+    overlay.update_validation_sample(
+        target=ValidationTarget(id="v0", x=0.25, y=0.25),
+        sample=valid_sample(),
+        screen_width=400.0,
+        screen_height=400.0,
+    )
+    image = QImage(400, 400, QImage.Format.Format_ARGB32)
+    image.fill(QColor(0, 0, 0, 0))
+
+    overlay.render(image)
+
+    assert QColor(image.pixel(100, 100)).alpha() > 0
+    overlay.close()
     qt_app.processEvents()
