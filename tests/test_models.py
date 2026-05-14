@@ -32,6 +32,19 @@ def test_invalid_observation_has_reason_and_zero_confidence() -> None:
     assert observation.feature_vector == ()
 
 
+def test_raw_observation_can_store_frame_dimensions_without_image_payload() -> None:
+    observation = RawObservation(
+        timestamp=1.0,
+        valid=True,
+        confidence=0.9,
+        frame_width=1280,
+        frame_height=720,
+    )
+
+    assert observation.frame_width == 1280
+    assert observation.frame_height == 720
+
+
 def test_gaze_sample_stores_region_and_validity() -> None:
     sample = GazeSample(
         timestamp=2.0,

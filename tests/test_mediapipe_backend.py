@@ -121,7 +121,8 @@ def test_mocked_landmarks_produce_valid_observation_with_stable_feature_vector()
     assert observation.right_iris is not None
     assert observation.right_iris.x == pytest.approx(70.0)
     assert observation.right_iris.y == pytest.approx(50.0)
-    assert observation.feature_vector == pytest.approx(
+    assert len(observation.feature_vector) == 20
+    assert observation.feature_vector[:14] == pytest.approx(
         (
             0.25,
             1 / 3,
@@ -139,6 +140,18 @@ def test_mocked_landmarks_produce_valid_observation_with_stable_feature_vector()
             0.0,
         )
     )
+    assert observation.feature_vector[14:] == pytest.approx(
+        (
+            0.5,
+            0.5,
+            0.8,
+            0.6,
+            4 / 3,
+            (40**2 + 10**2) ** 0.5 / 100,
+        )
+    )
+    assert observation.frame_width == 100
+    assert observation.frame_height == 100
 
 
 def test_close_releases_mediapipe_resources() -> None:

@@ -6,6 +6,7 @@ from pupil_tracker.models import Point2D, Rect
 from pupil_tracker.tracking.features import (
     FeatureExtractionError,
     eye_geometry_feature_vector,
+    face_context_feature_vector,
     iris_feature_vector,
 )
 
@@ -58,6 +59,51 @@ def test_eye_geometry_feature_vector_adds_vertical_eye_relative_features() -> No
             0.0,
         )
     )
+
+
+def test_face_context_features_include_position_and_scale() -> None:
+    eye_features = eye_geometry_feature_vector(
+        face_bounds=Rect(x=20, y=30, width=160, height=90),
+        left_iris=Point2D(x=70, y=70),
+        right_iris=Point2D(x=150, y=75),
+        left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+        right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+    )
+    features = face_context_feature_vector(
+        face_bounds=Rect(x=20, y=30, width=160, height=90),
+        left_iris=Point2D(x=70, y=70),
+        right_iris=Point2D(x=150, y=75),
+        left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+        right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+        frame_width=400,
+        frame_height=300,
+    )
+
+    assert len(features) == 20
+    assert features[:14] == pytest.approx(eye_features)
+    assert features[14:] == pytest.approx(
+        (
+            0.25,  # face center x in frame coordinates
+            0.25,  # face center y in frame coordinates
+            0.4,  # face width in frame coordinates
+            0.3,  # face height in frame coordinates
+            16 / 9,  # face aspect ratio
+            (80**2 + 5**2) ** 0.5 / 400,  # inter-ocular distance in frame width units
+        )
+    )
+
+
+def test_face_context_feature_vector_requires_valid_frame_dimensions() -> None:
+    with pytest.raises(FeatureExtractionError, match="frame dimensions"):
+        face_context_feature_vector(
+            face_bounds=Rect(x=20, y=30, width=160, height=90),
+            left_iris=Point2D(x=70, y=70),
+            right_iris=Point2D(x=150, y=75),
+            left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+            right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+            frame_width=0,
+            frame_height=300,
+        )
 
 
 def test_eye_geometry_feature_vector_requires_valid_eye_bounds() -> None:

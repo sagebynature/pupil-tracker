@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from math import hypot
+
 from pupil_tracker.models import Point2D, Rect
 
 
@@ -82,6 +84,54 @@ def eye_geometry_feature_vector(
         right_aperture,
         mean_eye_y,
         vertical_agreement,
+    )
+
+
+def face_context_feature_vector(
+    *,
+    face_bounds: Rect,
+    left_iris: Point2D | None,
+    right_iris: Point2D | None,
+    left_eye_bounds: Rect,
+    right_eye_bounds: Rect,
+    frame_width: int,
+    frame_height: int,
+) -> tuple[float, ...]:
+    """Return eye geometry plus face position/scale context.
+
+    The first fourteen values match :func:`eye_geometry_feature_vector`. The
+    appended values are normalized face center, normalized face size, face
+    aspect ratio, and inter-ocular distance normalized by frame width.
+    """
+
+    if frame_width <= 0 or frame_height <= 0:
+        msg = "frame dimensions must have positive width and height"
+        raise FeatureExtractionError(msg)
+    eye_features = eye_geometry_feature_vector(
+        face_bounds=face_bounds,
+        left_iris=left_iris,
+        right_iris=right_iris,
+        left_eye_bounds=left_eye_bounds,
+        right_eye_bounds=right_eye_bounds,
+    )
+    if left_iris is None or right_iris is None:
+        msg = "iris landmarks are required"
+        raise FeatureExtractionError(msg)
+    face_center_x = (face_bounds.x + face_bounds.width / 2.0) / frame_width
+    face_center_y = (face_bounds.y + face_bounds.height / 2.0) / frame_height
+    face_width = face_bounds.width / frame_width
+    face_height = face_bounds.height / frame_height
+    face_aspect_ratio = face_bounds.width / face_bounds.height
+    interocular_distance = hypot(left_iris.x - right_iris.x, left_iris.y - right_iris.y)
+    normalized_interocular_distance = interocular_distance / frame_width
+    return (
+        *eye_features,
+        face_center_x,
+        face_center_y,
+        face_width,
+        face_height,
+        face_aspect_ratio,
+        normalized_interocular_distance,
     )
 
 

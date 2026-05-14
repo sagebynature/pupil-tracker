@@ -10,7 +10,7 @@ import mediapipe as mp
 from pupil_tracker.logging_config import get_logger
 from pupil_tracker.models import Point2D, RawObservation, Rect
 from pupil_tracker.tracking.backend import Frame
-from pupil_tracker.tracking.features import FeatureExtractionError, eye_geometry_feature_vector
+from pupil_tracker.tracking.features import FeatureExtractionError, face_context_feature_vector
 
 _LOGGER = get_logger("tracking.mediapipe")
 
@@ -70,12 +70,14 @@ class MediaPipeTrackerBackend:
         )
 
         try:
-            features = eye_geometry_feature_vector(
+            features = face_context_feature_vector(
                 face_bounds=face_bounds,
                 left_iris=left_iris,
                 right_iris=right_iris,
                 left_eye_bounds=left_eye_bounds,
                 right_eye_bounds=right_eye_bounds,
+                frame_width=frame.metadata.width,
+                frame_height=frame.metadata.height,
             )
         except FeatureExtractionError as error:
             _LOGGER.debug("failed to extract MediaPipe features: %s", error)
@@ -92,6 +94,8 @@ class MediaPipeTrackerBackend:
             left_iris=left_iris,
             right_iris=right_iris,
             feature_vector=features,
+            frame_width=frame.metadata.width,
+            frame_height=frame.metadata.height,
         )
 
     def close(self) -> None:

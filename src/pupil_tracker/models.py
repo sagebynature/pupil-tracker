@@ -52,6 +52,8 @@ class RawObservation:
     left_iris: Point2D | None = None
     right_iris: Point2D | None = None
     feature_vector: tuple[float, ...] = ()
+    frame_width: int | None = None
+    frame_height: int | None = None
     reason: str | None = None
 
     @classmethod
