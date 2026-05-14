@@ -5,7 +5,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from pupil_tracker.calibration import CalibrationFitResult
+from pupil_tracker.calibration import (
+    CalibrationFitResult,
+    CalibrationPhase,
+    TimedCalibrationConfig,
+)
 from pupil_tracker.models import CalibrationSample, RawObservation
 
 APPS_ROOT = Path(__file__).resolve().parents[1] / "apps"
@@ -39,17 +43,37 @@ class FakeCalibrationModel:
         )
 
 
-def valid_observation(timestamp: float = 1.0) -> RawObservation:
+def valid_observation(timestamp: float = 1.0, confidence: float = 0.9) -> RawObservation:
     return RawObservation(
         timestamp=timestamp,
         valid=True,
-        confidence=0.9,
+        confidence=confidence,
         feature_vector=(timestamp, timestamp + 0.1),
     )
 
 
 def invalid_observation() -> RawObservation:
     return RawObservation.invalid(timestamp=99.0, reason="no face")
+
+
+class FakeClock:
+    def __init__(self, now: float = 0.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def timed_config() -> TimedCalibrationConfig:
+    return TimedCalibrationConfig(
+        settle_seconds=1.0,
+        capture_seconds=1.0,
+        min_samples_per_target=2,
+        min_confidence=0.6,
+    )
 
 
 def test_session_starts_idle_and_capture_noops_until_started() -> None:
@@ -152,3 +176,107 @@ def test_session_moves_to_failed_when_model_fit_fails() -> None:
     assert session.state is CalibrationSessionState.FAILED
     assert session.fit_result is None
     assert session.error_message == "synthetic fit failure"
+
+
+def test_timed_settle_phase_ignores_valid_observations() -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+
+    clock = FakeClock(now=0.0)
+    flow = CalibrationFlowState(samples_per_target=2)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+        timing_config=timed_config(),
+        clock=clock,
+    )
+    session.start()
+
+    assert session.phase is CalibrationPhase.SETTLING
+    assert session.capture(valid_observation()) is False
+    assert flow.all_samples() == ()
+    assert session.accepted_for_current_target == 0
+
+
+def test_timed_capture_phase_accepts_high_quality_observations() -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+
+    clock = FakeClock(now=0.0)
+    flow = CalibrationFlowState(samples_per_target=2)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+        timing_config=timed_config(),
+        clock=clock,
+    )
+    session.start()
+    clock.advance(1.0)
+
+    assert session.capture(valid_observation(timestamp=1.0)) is False
+
+    assert session.phase is CalibrationPhase.CAPTURING
+    assert len(flow.samples_for_current_target()) == 1
+    assert session.accepted_for_current_target == 1
+    assert session.rejected_for_current_target == 0
+
+
+def test_timed_low_quality_target_retries_instead_of_advancing() -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+
+    clock = FakeClock(now=0.0)
+    flow = CalibrationFlowState(samples_per_target=2)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+        timing_config=timed_config(),
+        clock=clock,
+    )
+    session.start()
+    clock.advance(1.0)
+    session.capture(valid_observation(timestamp=1.0))
+    session.capture(valid_observation(timestamp=1.1, confidence=0.5))
+    clock.advance(1.1)
+
+    assert session.capture(valid_observation(timestamp=2.2)) is True
+
+    assert flow.current_index == 0
+    assert flow.samples_for_current_target() == ()
+    assert session.target_quality is not None
+    assert session.target_quality.recommendation == "retry"
+    assert session.phase is CalibrationPhase.SETTLING
+
+
+def test_timed_high_quality_target_advances_after_capture_duration() -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+
+    clock = FakeClock(now=0.0)
+    flow = CalibrationFlowState(samples_per_target=2)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+        timing_config=timed_config(),
+        clock=clock,
+    )
+    session.start()
+    clock.advance(1.0)
+    session.capture(valid_observation(timestamp=1.0))
+    session.capture(valid_observation(timestamp=1.1))
+    clock.advance(1.1)
+
+    assert session.capture(valid_observation(timestamp=2.2)) is True
+
+    assert flow.current_index == 1
+    assert session.target_quality is not None
+    assert session.target_quality.recommendation == "advance"
+    assert session.phase is CalibrationPhase.SETTLING
