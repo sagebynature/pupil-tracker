@@ -10,7 +10,7 @@ from typing import cast
 
 import numpy as np
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from pupil_tracker.camera import CameraError
 from pupil_tracker.models import FrameMetadata
@@ -68,6 +68,20 @@ def fake_frame() -> Frame:
     )
 
 
+def fake_wide_frame() -> Frame:
+    image = np.zeros((90, 160, 3), dtype=np.uint8)
+    return Frame(
+        image=image,
+        metadata=FrameMetadata(
+            timestamp=1.0,
+            camera_id=0,
+            width=160,
+            height=90,
+            channels=3,
+        ),
+    )
+
+
 def test_start_camera_starts_preview_timer(qt_app: QApplication) -> None:
     from desktop_demo.ui.main_window import MainWindow
 
@@ -107,6 +121,26 @@ def test_update_preview_frame_renders_camera_pixmap(qt_app: QApplication) -> Non
     assert pixmap is not None
     assert not pixmap.isNull()
     assert camera.read_calls == 1
+
+
+def test_preview_panel_expands_and_scales_frame_to_available_space(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    camera = FakeCamera(frames=[fake_wide_frame()])
+    window = MainWindow(camera_factory=lambda: camera)
+    window.preview_label.resize(800, 600)
+    window.start_camera()
+
+    window.update_preview_frame()
+
+    pixmap = window.preview_label.pixmap()
+    assert pixmap is not None
+    assert pixmap.width() == 800
+    assert pixmap.height() == 450
+    assert window.preview_label.sizePolicy().horizontalPolicy() is QSizePolicy.Policy.Expanding
+    assert window.preview_label.sizePolicy().verticalPolicy() is QSizePolicy.Policy.Expanding
 
 
 def test_update_preview_frame_failure_stops_timer_and_reports_error(qt_app: QApplication) -> None:

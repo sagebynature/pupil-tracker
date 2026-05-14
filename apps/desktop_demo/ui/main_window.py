@@ -8,14 +8,15 @@ from typing import Any, Protocol, cast
 
 import numpy as np
 from numpy.typing import NDArray
-from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QPixmap
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtGui import QCloseEvent, QImage, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -165,9 +166,15 @@ class MainWindow(QMainWindow):
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
         )
         self.telemetry_logger: JsonlLogger | None = None
+        self._last_preview_qimage: QImage | None = None
 
         self.preview_label = QLabel("Camera preview stopped")
         self.preview_label.setMinimumSize(640, 360)
+        self.preview_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setStyleSheet("background: #111; color: #ddd; padding: 16px;")
 
         self.start_button = QPushButton("Start Camera")
@@ -204,7 +211,7 @@ class MainWindow(QMainWindow):
         controls.addStretch(1)
 
         layout = QVBoxLayout()
-        layout.addWidget(self.preview_label)
+        layout.addWidget(self.preview_label, 1)
         layout.addLayout(controls)
         layout.addWidget(self.calibration_view)
         layout.addWidget(self.debug_label)
@@ -314,7 +321,28 @@ class MainWindow(QMainWindow):
             return
         image = self._preview_image_for_frame(frame)
         qimage = bgr_ndarray_to_qimage(image)
-        self.preview_label.setPixmap(QPixmap.fromImage(qimage))
+        self._set_preview_image(qimage)
+
+    def _set_preview_image(self, qimage: QImage) -> None:
+        """Render a preview image scaled to the available preview panel."""
+
+        self._last_preview_qimage = qimage
+        target_size = self.preview_label.size()
+        if target_size.width() <= 0 or target_size.height() <= 0:
+            target_size = qimage.size()
+        pixmap = QPixmap.fromImage(qimage).scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.preview_label.setPixmap(pixmap)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Rescale the last preview frame when the demo window is resized."""
+
+        super().resizeEvent(event)
+        if self._last_preview_qimage is not None:
+            self._set_preview_image(self._last_preview_qimage)
 
     def _preview_image_for_frame(self, frame: Frame) -> NDArray[np.uint8]:
         """Return the image to render for a frame, annotated when tracking is enabled."""
