@@ -2,7 +2,7 @@
 
 A webcam-first pupil and gaze tracking library with a macOS desktop demo application.
 
-The MVP provides a Python library plus PySide6/Qt demo shell for coarse gaze tracking experiments: webcam capture, MediaPipe-based iris/face observations, 9-point calibration, polynomial/ridge gaze calibration, 3x3 screen-region mapping, a confidence-aware transparent gaze overlay, macOS visible-window candidate scoring, and opt-in JSONL telemetry.
+The MVP provides a Python library plus PySide6/Qt demo shell for coarse gaze tracking experiments: webcam capture, MediaPipe-based iris/face observations, timed quality-gated 9-point calibration, post-calibration validation metrics, polynomial/ridge gaze calibration, 3x3 screen-region mapping, confidence-aware transparent gaze/validation overlays, a gaze heatmap, macOS visible-window candidate scoring, and opt-in JSONL telemetry.
 
 The future product direction is gaze-assisted application window focus. The MVP deliberately does not focus, raise, click, or activate windows.
 
@@ -14,15 +14,18 @@ Implemented library/demo areas:
 
 - Core immutable models for observations, calibration samples, gaze samples, and window candidates.
 - 9-point calibration target generation and sample collection.
+- Timed calibration phases with settle/capture/review windows and quality-gated retries.
 - Polynomial/ridge calibration model.
+- Post-calibration validation targets, validation session controller, and mean/median/max error metrics.
 - Exponential moving-average gaze smoothing.
 - 3x3 screen-region classification.
 - Pluggable tracker backend protocol.
 - OpenCV camera source.
 - MediaPipe Tasks/FaceLandmarker-backed tracker adapter with injectable fakes for tests.
 - Synchronous runtime pipeline for camera/backend/calibration/smoothing/region mapping.
-- PySide6 desktop demo shell with camera, calibration, overlay, and telemetry controls.
-- Transparent confidence-aware gaze overlay widget.
+- PySide6 desktop demo shell with camera, calibration, validation, overlay, heatmap, and telemetry controls.
+- Transparent confidence-aware gaze overlay and validation target/prediction/error-line overlay.
+- Gaze trail and heatmap verification helpers for live accuracy checks.
 - macOS CoreGraphics visible-window enumeration and pure candidate scoring.
 - Privacy-conscious JSONL telemetry with no frame/video payloads by default.
 
@@ -94,12 +97,34 @@ Expected manual path:
 1. Click Start Camera and confirm live preview.
 2. Center your face and confirm tracker annotations appear.
 3. Click Start Calibration and follow the 9 visible targets.
-4. Confirm calibration completes with fit metrics.
-5. Move gaze around the screen and confirm overlay, 3x3 region, and window-candidate debug text update plausibly.
-6. If logging is enabled, confirm JSONL telemetry contains scalar events only and no frame/image payloads.
-7. Stop Camera or close the app and confirm camera/tracker/overlay/log resources are released.
+4. Hold gaze through each target's Settle and Capture phases.
+5. Confirm calibration completes with fit metrics.
+6. Click Start Validation and follow the validation targets.
+7. Confirm target dot, predicted dot, error line, and validation metrics are understandable.
+8. Move gaze around the screen and confirm overlay, 3x3 region, heatmap, and window-candidate debug text update plausibly.
+9. If logging is enabled, confirm JSONL telemetry contains scalar events only and no frame/image payloads.
+10. Stop Camera or close the app and confirm camera/tracker/overlay/log resources are released.
 
 Manual live testing should follow `docs/manual-test-checklist.md`.
+
+## Calibration, Validation, and Accuracy Checks
+
+Calibration is accuracy-first. The demo intentionally asks for stable timed samples before trusting a fit:
+
+- Settle: look at the target dot and hold still. Samples are ignored during this short window.
+- Capture: keep looking at the target. Valid, confident observations are counted.
+- Review: the session checks accepted/rejected counts. Low-quality targets are retried instead of silently advancing.
+
+After calibration completes, run validation before judging tracking quality. Validation uses held-out target points and reports:
+
+- Mean error: average distance between validation target and predicted gaze.
+- Median error: typical distance, less sensitive to outliers.
+- Max error: worst observed distance.
+- Recommendation: `excellent`, `good`, `usable`, or `retry`.
+
+Use the validation overlay to diagnose failures. The target dot is where you should look, the predicted dot is the calibrated estimate, and the line between them is the current error. If the recommendation is `retry`, improve lighting/camera position, reduce head movement, and recalibrate.
+
+For longer live checks, enable Show Heatmap and stare at fixed points. The heatmap should cluster where you hold your gaze. Use Clear Heatmap between trials.
 
 ## Privacy and Telemetry
 
@@ -109,7 +134,7 @@ The app is privacy-conscious by default:
 - No frame/image arrays are written to telemetry by default.
 - JSONL telemetry is opt-in through Start Logging / Stop Logging controls.
 - Default demo telemetry path is under `metrics/`, which is ignored by git.
-- Telemetry serializers include scalar summaries such as timestamps, gaze coordinates, confidence, calibration target ids, sample counts, and visible-window candidate metadata.
+- Telemetry serializers include scalar summaries such as timestamps, gaze coordinates, confidence, calibration target ids, sample counts, calibration quality, validation samples, validation metrics, and visible-window candidate metadata.
 
 Any future video/frame capture feature must be explicit opt-in and documented separately.
 
