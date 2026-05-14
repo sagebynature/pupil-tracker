@@ -26,10 +26,20 @@ class OpenCVCamera:
         camera_id: int | str = 0,
         width: int | None = None,
         height: int | None = None,
+        read_retry_attempts: int = 5,
+        read_retry_delay_seconds: float = 0.05,
     ) -> None:
+        if read_retry_attempts < 1:
+            msg = "read_retry_attempts must be at least 1"
+            raise ValueError(msg)
+        if read_retry_delay_seconds < 0.0:
+            msg = "read_retry_delay_seconds must be non-negative"
+            raise ValueError(msg)
         self.camera_id = camera_id
         self.width = width
         self.height = height
+        self.read_retry_attempts = read_retry_attempts
+        self.read_retry_delay_seconds = read_retry_delay_seconds
         self._capture: Any | None = None
 
     @property
@@ -65,8 +75,14 @@ class OpenCVCamera:
             msg = "camera is not open"
             raise CameraError(msg)
 
-        success, image = self._capture.read()
-        if not success or image is None:
+        image: Any | None = None
+        for attempt in range(self.read_retry_attempts):
+            success, image = self._capture.read()
+            if success and image is not None:
+                break
+            if attempt < self.read_retry_attempts - 1:
+                time.sleep(self.read_retry_delay_seconds)
+        else:
             msg = f"failed to read frame from camera {self.camera_id!r}"
             raise CameraError(msg)
 

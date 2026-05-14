@@ -18,6 +18,7 @@ class FakeVideoCapture:
         self.properties: dict[int, float] = {}
         self.frame = np.zeros((4, 5, 3), dtype=np.uint8)
         self.read_success = True
+        self.read_results: list[tuple[bool, Any]] = []
 
     def isOpened(self) -> bool:
         return self.opened
@@ -27,6 +28,8 @@ class FakeVideoCapture:
         return True
 
     def read(self) -> tuple[bool, Any]:
+        if self.read_results:
+            return self.read_results.pop(0)
         return self.read_success, self.frame
 
     def release(self) -> None:
@@ -73,6 +76,29 @@ def test_open_configures_capture_and_read_returns_frame(monkeypatch: pytest.Monk
     assert frame.metadata.height == 4
     assert frame.metadata.channels == 3
     assert frame.metadata.timestamp > 0.0
+
+
+def test_read_retries_transient_startup_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    captures: list[FakeVideoCapture] = []
+
+    def fake_video_capture(camera_id: int | str) -> FakeVideoCapture:
+        capture = FakeVideoCapture(camera_id)
+        capture.read_results = [
+            (False, None),
+            (False, None),
+            (True, capture.frame),
+        ]
+        captures.append(capture)
+        return capture
+
+    monkeypatch.setattr("pupil_tracker.camera.opencv_camera.cv2.VideoCapture", fake_video_capture)
+    camera = OpenCVCamera(camera_id=0, read_retry_delay_seconds=0.0)
+    camera.open()
+
+    frame = camera.read()
+
+    assert frame.image.shape == (4, 5, 3)
+    assert captures[0].read_results == []
 
 
 def test_open_raises_camera_error_when_capture_does_not_open(
