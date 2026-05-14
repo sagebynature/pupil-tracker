@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from itertools import pairwise
 from typing import Final
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from pupil_tracker.calibration import ValidationTarget
 from pupil_tracker.models import GazeSample, Point2D
+from pupil_tracker.screen import GazeHeatmap, HeatmapConfig
 
 _DEFAULT_DOT_RADIUS: Final[float] = 6.0
 _DEFAULT_MIN_HALO_RADIUS: Final[float] = 14.0
@@ -180,6 +181,8 @@ class GazeOverlay(QWidget):
         super().__init__()
         self.state = state if state is not None else OverlayState()
         self.validation_state = ValidationOverlayState()
+        self.heatmap = GazeHeatmap(HeatmapConfig(screen_width=1.0, screen_height=1.0))
+        self.heatmap_enabled = False
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -193,6 +196,27 @@ class GazeOverlay(QWidget):
         """Update overlay drawing state from a gaze sample."""
 
         self.state.update(sample)
+        if self.heatmap_enabled:
+            self.heatmap.add(sample)
+        self.update()
+
+    def configure_heatmap(self, *, screen_width: float, screen_height: float) -> None:
+        """Configure the screen-space heatmap grid."""
+
+        self.heatmap = GazeHeatmap(
+            HeatmapConfig(screen_width=screen_width, screen_height=screen_height)
+        )
+
+    def set_heatmap_enabled(self, enabled: bool) -> None:
+        """Toggle heatmap rendering and accumulation."""
+
+        self.heatmap_enabled = enabled
+        self.update()
+
+    def clear_heatmap(self) -> None:
+        """Clear accumulated heatmap samples."""
+
+        self.heatmap.clear()
         self.update()
 
     def update_validation_sample(
@@ -219,6 +243,8 @@ class GazeOverlay(QWidget):
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.heatmap_enabled:
+            _draw_heatmap(painter, self.heatmap, self.width(), self.height())
         validation_current = self.validation_state.current
         if validation_current is not None:
             _draw_validation(painter, validation_current, self.validation_state.trail)
@@ -229,6 +255,38 @@ class GazeOverlay(QWidget):
             _draw_trail(painter, self.state.trail)
             _draw_cursor(painter, current)
         painter.end()
+
+
+def _draw_heatmap(
+    painter: QPainter,
+    heatmap: GazeHeatmap,
+    widget_width: int,
+    widget_height: int,
+) -> None:
+    cells = heatmap.normalized_cells()
+    if widget_width <= 0 or widget_height <= 0 or not cells:
+        return
+    rows = len(cells)
+    cols = len(cells[0]) if rows else 0
+    if cols == 0:
+        return
+    cell_width = widget_width / cols
+    cell_height = widget_height / rows
+    painter.setPen(Qt.PenStyle.NoPen)
+    for row_index, row in enumerate(cells):
+        for col_index, intensity in enumerate(row):
+            if intensity <= 0.0:
+                continue
+            alpha = int(120 * min(1.0, intensity))
+            painter.setBrush(QColor(255, 90, 30, alpha))
+            painter.drawRect(
+                QRectF(
+                    col_index * cell_width,
+                    row_index * cell_height,
+                    cell_width,
+                    cell_height,
+                )
+            )
 
 
 def _draw_validation(

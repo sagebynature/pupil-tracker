@@ -206,3 +206,48 @@ def test_validation_overlay_render_marks_target_pixel(qt_app: QApplication) -> N
     assert QColor(image.pixel(100, 100)).alpha() > 0
     overlay.close()
     qt_app.processEvents()
+
+
+def test_enabled_heatmap_accumulates_valid_gaze_samples(qt_app: QApplication) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    window = MainWindow(camera_factory=FakeCamera)
+    window.set_heatmap_enabled(True)
+
+    window.handle_gaze_sample(valid_sample())
+
+    cells = window.gaze_overlay.heatmap.normalized_cells()
+    assert max(max(row) for row in cells) == 1.0
+    window.close()
+    qt_app.processEvents()
+
+
+def test_enabled_heatmap_ignores_invalid_gaze_samples(qt_app: QApplication) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    window = MainWindow(camera_factory=FakeCamera)
+    window.set_heatmap_enabled(True)
+
+    window.handle_gaze_sample(
+        GazeSample(timestamp=2.0, x=100.0, y=200.0, confidence=0.0, valid=False)
+    )
+
+    cells = window.gaze_overlay.heatmap.normalized_cells()
+    assert sum(sum(row) for row in cells) == 0.0
+    window.close()
+    qt_app.processEvents()
+
+
+def test_clear_heatmap_resets_cells(qt_app: QApplication) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    window = MainWindow(camera_factory=FakeCamera)
+    window.set_heatmap_enabled(True)
+    window.handle_gaze_sample(valid_sample())
+
+    window.clear_heatmap()
+
+    cells = window.gaze_overlay.heatmap.normalized_cells()
+    assert sum(sum(row) for row in cells) == 0.0
+    window.close()
+    qt_app.processEvents()

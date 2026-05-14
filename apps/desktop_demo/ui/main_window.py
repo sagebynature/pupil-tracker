@@ -187,6 +187,9 @@ class MainWindow(QMainWindow):
         self.stop_button = QPushButton("Stop Camera")
         self.start_logging_button = QPushButton("Start Logging")
         self.stop_logging_button = QPushButton("Stop Logging")
+        self.show_heatmap_button = QPushButton("Show Heatmap")
+        self.show_heatmap_button.setCheckable(True)
+        self.clear_heatmap_button = QPushButton("Clear Heatmap")
         self.calibration_view = CalibrationView(
             flow=(
                 cast(CalibrationFlowState, calibration_session.flow)
@@ -212,6 +215,8 @@ class MainWindow(QMainWindow):
         self.stop_button.clicked.connect(self.stop_camera)
         self.start_logging_button.clicked.connect(self.start_logging)
         self.stop_logging_button.clicked.connect(self.stop_logging)
+        self.show_heatmap_button.toggled.connect(self.set_heatmap_enabled)
+        self.clear_heatmap_button.clicked.connect(self.clear_heatmap)
         self.calibration_view.start_button.clicked.connect(self.start_calibration)
         self.calibration_view.validation_button.clicked.connect(self.start_validation)
 
@@ -220,6 +225,8 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.stop_button)
         controls.addWidget(self.start_logging_button)
         controls.addWidget(self.stop_logging_button)
+        controls.addWidget(self.show_heatmap_button)
+        controls.addWidget(self.clear_heatmap_button)
         controls.addStretch(1)
 
         layout = QVBoxLayout()
@@ -514,6 +521,26 @@ class MainWindow(QMainWindow):
             self._update_window_candidate_status(sample)
         else:
             self.gaze_overlay.hide()
+
+    def set_heatmap_enabled(self, enabled: bool) -> None:
+        """Toggle verification heatmap accumulation and rendering."""
+
+        screen_width, screen_height = self._screen_size()
+        self.gaze_overlay.configure_heatmap(
+            screen_width=screen_width,
+            screen_height=screen_height,
+        )
+        self.gaze_overlay.set_heatmap_enabled(enabled)
+        self.show_heatmap_button.setChecked(enabled)
+        self.debug_label.setText(
+            "Heatmap enabled" if enabled else "Heatmap disabled"
+        )
+
+    def clear_heatmap(self) -> None:
+        """Clear verification heatmap samples."""
+
+        self.gaze_overlay.clear_heatmap()
+        self.debug_label.setText("Heatmap cleared")
 
     def _update_window_candidate_status(self, sample: GazeSample) -> None:
         """Update debug output with the current visible window candidate."""
