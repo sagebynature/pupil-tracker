@@ -178,6 +178,7 @@ class CalibrationView(QWidget):
         self.status_label = QLabel()
         self.target_widget = CalibrationTargetWidget(self.flow)
         self.start_button = QPushButton("Start Calibration")
+        self.vertical_calibration_button = QPushButton("Start Vertical Calibration")
         self.validation_button = QPushButton("Start Validation")
         self.validation_button.setEnabled(False)
 
@@ -187,8 +188,17 @@ class CalibrationView(QWidget):
         layout.addWidget(self.status_label)
         layout.addWidget(self.target_widget)
         layout.addWidget(self.start_button)
+        layout.addWidget(self.vertical_calibration_button)
         layout.addWidget(self.validation_button)
         self.setLayout(layout)
+        self.refresh()
+
+    def set_flow(self, flow: CalibrationFlowState, *, title: str) -> None:
+        """Replace the active calibration flow and refresh dependent widgets."""
+
+        self.flow = flow
+        self.target_widget.flow = flow
+        self.title_label.setText(title)
         self.refresh()
 
     def current_target_position(self) -> tuple[float, float] | None:

@@ -38,6 +38,7 @@ from pupil_tracker.calibration import (
     PolynomialRidgeCalibrationModel,
     TimedCalibrationConfig,
     validation_pattern,
+    vertical_grid_pattern,
 )
 from pupil_tracker.camera import CameraError, OpenCVCamera
 from pupil_tracker.models import GazeSample, Point2D, WindowCandidate
@@ -238,6 +239,9 @@ class MainWindow(QMainWindow):
         self.show_heatmap_button.toggled.connect(self.set_heatmap_enabled)
         self.clear_heatmap_button.clicked.connect(self.clear_heatmap)
         self.calibration_view.start_button.clicked.connect(self.start_calibration)
+        self.calibration_view.vertical_calibration_button.clicked.connect(
+            self.start_vertical_calibration
+        )
         self.calibration_view.validation_button.clicked.connect(self.start_validation)
 
         controls = QHBoxLayout()
@@ -375,6 +379,19 @@ class MainWindow(QMainWindow):
         self.calibration_target_overlay.show()
         self._refresh_calibration_view_status()
         self._update_calibration_status(None)
+
+    def start_vertical_calibration(self) -> None:
+        """Start the denser vertical calibration strategy for live accuracy checks."""
+
+        if not self._uses_default_calibration_session:
+            self.debug_label.setText("Vertical calibration unavailable for injected sessions")
+            return
+        flow = CalibrationFlowState(targets=vertical_grid_pattern())
+        self.calibration_view.set_flow(flow, title="15-point vertical calibration")
+        self.calibration_target_overlay.flow = flow
+        self.calibration_session = self._create_default_calibration_session()
+        self.gaze_runtime = GazeRuntime(model=cast(Any, self.calibration_session.model))
+        self.start_calibration()
 
     def start_validation(self) -> None:
         """Start post-calibration validation against known targets."""
