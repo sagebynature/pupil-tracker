@@ -169,6 +169,8 @@ class CalibrationView(QWidget):
         self.status_label = QLabel()
         self.target_widget = CalibrationTargetWidget(self.flow)
         self.start_button = QPushButton("Start Calibration")
+        self.validation_button = QPushButton("Start Validation")
+        self.validation_button.setEnabled(False)
 
         layout = QVBoxLayout()
         layout.addWidget(self.title_label)
@@ -176,6 +178,7 @@ class CalibrationView(QWidget):
         layout.addWidget(self.status_label)
         layout.addWidget(self.target_widget)
         layout.addWidget(self.start_button)
+        layout.addWidget(self.validation_button)
         self.setLayout(layout)
         self.refresh()
 

@@ -28,8 +28,13 @@ from desktop_demo.ui.annotations import annotate_observation
 from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
 from desktop_demo.ui.frame_image import bgr_ndarray_to_qimage
 from desktop_demo.ui.overlay import GazeOverlay
+from desktop_demo.validation_session import ValidationSession, ValidationSessionState
 from pupil_tracker import get_logger
-from pupil_tracker.calibration import PolynomialRidgeCalibrationModel, TimedCalibrationConfig
+from pupil_tracker.calibration import (
+    PolynomialRidgeCalibrationModel,
+    TimedCalibrationConfig,
+    validation_pattern,
+)
 from pupil_tracker.camera import CameraError, OpenCVCamera
 from pupil_tracker.models import GazeSample, Point2D, WindowCandidate
 from pupil_tracker.platform import candidate_at_point, list_visible_windows
@@ -142,6 +147,7 @@ class MainWindow(QMainWindow):
         preview_interval_ms: int = 33,
         tracking_runtime: TrackingRuntimeLike | None = None,
         calibration_session: CalibrationSession | None = None,
+        validation_session: ValidationSession | None = None,
         gaze_runtime: GazeRuntimeLike | None = None,
         window_provider: WindowProvider | None = None,
         model_asset_path: Path | None = None,
@@ -193,6 +199,11 @@ class MainWindow(QMainWindow):
             if calibration_session is not None
             else self._create_default_calibration_session()
         )
+        self.validation_session = (
+            validation_session
+            if validation_session is not None
+            else self._create_default_validation_session()
+        )
         if self.gaze_runtime is None:
             self.gaze_runtime = GazeRuntime(model=cast(Any, self.calibration_session.model))
         self.debug_label = QLabel("Debug: confidence -- | region -- | fps --")
@@ -202,6 +213,7 @@ class MainWindow(QMainWindow):
         self.start_logging_button.clicked.connect(self.start_logging)
         self.stop_logging_button.clicked.connect(self.stop_logging)
         self.calibration_view.start_button.clicked.connect(self.start_calibration)
+        self.calibration_view.validation_button.clicked.connect(self.start_validation)
 
         controls = QHBoxLayout()
         controls.addWidget(self.start_button)
@@ -239,6 +251,22 @@ class MainWindow(QMainWindow):
             screen_width=screen_width,
             screen_height=screen_height,
             timing_config=TimedCalibrationConfig(),
+        )
+
+    def _create_default_validation_session(self) -> ValidationSession:
+        """Create the default post-calibration validation session."""
+
+        screen_width, screen_height = self._screen_size()
+        return ValidationSession(
+            targets=validation_pattern(),
+            screen_width=screen_width,
+            screen_height=screen_height,
+            timing_config=TimedCalibrationConfig(
+                settle_seconds=1.0,
+                capture_seconds=1.5,
+                min_samples_per_target=10,
+                min_confidence=0.0,
+            ),
         )
 
     def _show_model_setup_guidance(self, detail: str | None = None) -> None:
@@ -303,9 +331,22 @@ class MainWindow(QMainWindow):
 
         if self._uses_default_calibration_session and not self.start_tracking():
             return
+        self.calibration_view.validation_button.setEnabled(False)
         self.calibration_session.start()
         self._refresh_calibration_view_status()
         self._update_calibration_status(None)
+
+    def start_validation(self) -> None:
+        """Start post-calibration validation against known targets."""
+
+        if self.calibration_session.state is not CalibrationSessionState.COMPLETE:
+            self.debug_label.setText("Validation unavailable: complete calibration first")
+            return
+        if self.tracking_runtime is None and not self.start_tracking():
+            return
+        self.validation_session.start()
+        self.calibration_view.validation_button.setEnabled(False)
+        self._update_validation_debug()
 
     def update_preview_frame(self) -> None:
         """Read and display one preview frame from the running camera."""
@@ -377,10 +418,74 @@ class MainWindow(QMainWindow):
             self._refresh_calibration_view_status()
             self._update_calibration_status(status)
             return
+        if self._validation_is_active():
+            self._update_validation_status(status)
+            return
         if self.calibration_session.state is CalibrationSessionState.COMPLETE:
             self._update_gaze_status(status)
             return
         self._update_tracking_status(status)
+
+    def _validation_is_active(self) -> bool:
+        return self.validation_session.state in {
+            ValidationSessionState.SETTLING,
+            ValidationSessionState.CAPTURING,
+        }
+
+    def _update_validation_status(self, status: TrackingStatus) -> None:
+        """Update validation session and overlay from calibrated gaze."""
+
+        if self.gaze_runtime is None:
+            self._update_tracking_status(status)
+            return
+        target = self.validation_session.current_target
+        screen_width = self.validation_session.screen_width
+        screen_height = self.validation_session.screen_height
+        sample = self.gaze_runtime.update(
+            status.observation,
+            screen_width=screen_width,
+            screen_height=screen_height,
+        )
+        if sample is None:
+            self._update_tracking_status(status)
+            return
+        if target is not None:
+            self.gaze_overlay.update_validation_sample(
+                target=target,
+                sample=sample,
+                screen_width=screen_width,
+                screen_height=screen_height,
+            )
+            self.gaze_overlay.show()
+        self.validation_session.capture(sample)
+        self._update_validation_debug()
+
+    def _update_validation_debug(self) -> None:
+        """Update debug/status labels for validation progress and metrics."""
+
+        session = self.validation_session
+        if session.state is ValidationSessionState.COMPLETE and session.metrics is not None:
+            metrics = session.metrics
+            recommendation = metrics.recommendation
+            guidance = (
+                "retry calibration"
+                if recommendation == "retry"
+                else f"{recommendation} calibration"
+            )
+            self.debug_label.setText(
+                "Validation complete: "
+                f"mean error {metrics.mean_error_px:.2f}px | "
+                f"max error {metrics.max_error_px:.2f}px | {guidance}"
+            )
+            self.calibration_view.validation_button.setEnabled(True)
+            return
+        target_index = session.current_index + 1
+        target_total = len(session.targets)
+        self.debug_label.setText(
+            f"Validation target {target_index}/{target_total} | "
+            f"accepted {session.accepted_for_current_target}/"
+            f"{session.timing_config.min_samples_per_target}"
+        )
 
     def _update_gaze_status(self, status: TrackingStatus) -> None:
         """Update the debug label from calibrated gaze when tracking is active."""
@@ -455,10 +560,11 @@ class MainWindow(QMainWindow):
         session = self.calibration_session
         if session.state is CalibrationSessionState.COMPLETE and session.fit_result is not None:
             result = session.fit_result
+            self.calibration_view.validation_button.setEnabled(True)
             self.debug_label.setText(
                 "Calibration complete: "
                 f"{result.sample_count} samples | mean error {result.mean_error_px:.2f}px | "
-                f"max error {result.max_error_px:.2f}px"
+                f"max error {result.max_error_px:.2f}px | Start validation"
             )
         elif session.state is CalibrationSessionState.FAILED:
             self.debug_label.setText(f"Calibration failed: {session.error_message}")

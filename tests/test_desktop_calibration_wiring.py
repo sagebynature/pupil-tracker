@@ -12,8 +12,12 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from pupil_tracker.calibration import CalibrationFitResult, TimedCalibrationConfig
-from pupil_tracker.models import FrameMetadata, RawObservation
+from pupil_tracker.calibration import (
+    CalibrationFitResult,
+    TimedCalibrationConfig,
+    validation_pattern,
+)
+from pupil_tracker.models import FrameMetadata, GazeSample, RawObservation
 from pupil_tracker.tracking import Frame
 
 APPS_ROOT = Path(__file__).resolve().parents[1] / "apps"
@@ -75,6 +79,23 @@ class FakeCalibrationModel:
         )
 
 
+class FakeGazeRuntime:
+    def __init__(self, sample: GazeSample | None) -> None:
+        self.sample = sample
+        self.update_calls = 0
+
+    def update(
+        self,
+        observation: RawObservation,
+        *,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample | None:
+        del observation, screen_width, screen_height
+        self.update_calls += 1
+        return self.sample
+
+
 @pytest.fixture(scope="module")
 def qt_app() -> Iterator[QApplication]:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -100,6 +121,17 @@ def valid_observation(timestamp: float = 1.0) -> RawObservation:
     )
 
 
+def gaze_sample(*, x: float = 250.0, y: float = 200.0) -> GazeSample:
+    return GazeSample(
+        timestamp=1.0,
+        x=x,
+        y=y,
+        confidence=0.9,
+        valid=True,
+        region_id="validation",
+    )
+
+
 class FakeClock:
     def __init__(self, now: float = 0.0) -> None:
         self.now = now
@@ -117,6 +149,15 @@ def timed_config() -> TimedCalibrationConfig:
         capture_seconds=1.0,
         min_samples_per_target=2,
         min_confidence=0.6,
+    )
+
+
+def validation_config() -> TimedCalibrationConfig:
+    return TimedCalibrationConfig(
+        settle_seconds=1.0,
+        capture_seconds=1.0,
+        min_samples_per_target=1,
+        min_confidence=0.0,
     )
 
 
@@ -290,5 +331,123 @@ def test_timed_calibration_live_frame_shows_capture_progress(qt_app: QApplicatio
     assert "Capturing:" in window.calibration_view.status_label.text()
     assert "Accepted: 1/2 | Rejected: 0" in window.calibration_view.status_label.text()
     assert "Calibration target 1/9" in window.debug_label.text()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_completed_calibration_enables_validation_control(qt_app: QApplication) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.main_window import MainWindow
+
+    session = CalibrationSession(
+        flow=CalibrationFlowState(samples_per_target=1),
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+    )
+    session.state = CalibrationSessionState.COMPLETE
+    session.fit_result = CalibrationFitResult(
+        sample_count=45,
+        mean_error_px=1.0,
+        max_error_px=2.0,
+    )
+    window = MainWindow(
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        calibration_session=session,
+    )
+
+    window._update_calibration_status(None)
+
+    assert window.calibration_view.validation_button.isEnabled()
+    assert "Start validation" in window.debug_label.text()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_live_calibrated_gaze_updates_validation_session_and_overlay(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.main_window import MainWindow
+    from desktop_demo.validation_session import ValidationSession, ValidationSessionState
+
+    clock = FakeClock()
+    calibration_session = CalibrationSession(
+        flow=CalibrationFlowState(samples_per_target=1),
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+    )
+    calibration_session.state = CalibrationSessionState.COMPLETE
+    validation_session = ValidationSession(
+        targets=validation_pattern()[:1],
+        screen_width=1000,
+        screen_height=800,
+        timing_config=validation_config(),
+        clock=clock,
+    )
+    window = MainWindow(
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        tracking_runtime=FakeTrackingRuntime([valid_observation()]),
+        calibration_session=calibration_session,
+        gaze_runtime=FakeGazeRuntime(gaze_sample()),
+        validation_session=validation_session,
+    )
+    window.start_camera()
+    window.start_validation()
+    clock.advance(1.0)
+
+    window.update_preview_frame()
+
+    assert validation_session.state is ValidationSessionState.CAPTURING
+    assert validation_session.accepted_for_current_target == 1
+    assert window.gaze_overlay.validation_state.current is not None
+    assert "Validation target 1/1" in window.debug_label.text()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_validation_completion_displays_metrics_and_retry_guidance(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.main_window import MainWindow
+    from desktop_demo.validation_session import ValidationSession, ValidationSessionState
+
+    clock = FakeClock()
+    calibration_session = CalibrationSession(
+        flow=CalibrationFlowState(samples_per_target=1),
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+    )
+    calibration_session.state = CalibrationSessionState.COMPLETE
+    validation_session = ValidationSession(
+        targets=validation_pattern()[:1],
+        screen_width=1000,
+        screen_height=800,
+        timing_config=validation_config(),
+        clock=clock,
+    )
+    window = MainWindow(
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        tracking_runtime=FakeTrackingRuntime([valid_observation()]),
+        calibration_session=calibration_session,
+        gaze_runtime=FakeGazeRuntime(gaze_sample(x=650.0, y=200.0)),
+        validation_session=validation_session,
+    )
+    window.start_camera()
+    window.start_validation()
+    clock.advance(1.0)
+    window.update_preview_frame()
+    clock.advance(1.1)
+
+    window.update_preview_frame()
+
+    assert validation_session.state is ValidationSessionState.COMPLETE
+    assert validation_session.metrics is not None
+    assert validation_session.metrics.recommendation == "retry"
+    assert "Validation complete" in window.debug_label.text()
+    assert "retry calibration" in window.debug_label.text()
     window.close()
     qt_app.processEvents()
