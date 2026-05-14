@@ -41,8 +41,11 @@ from pupil_tracker.platform import candidate_at_point, list_visible_windows
 from pupil_tracker.telemetry import (
     JsonlLogger,
     calibration_event_payload,
+    calibration_target_quality_payload,
     gaze_event_payload,
     raw_observation_event_payload,
+    validation_metrics_payload,
+    validation_sample_payload,
     window_candidate_payload,
 )
 from pupil_tracker.tracking import Frame, MediaPipeTrackerBackend
@@ -411,7 +414,7 @@ class MainWindow(QMainWindow):
 
         if self.calibration_session.is_collecting:
             target = self.calibration_session.flow.current_target
-            self.calibration_session.capture(status.observation)
+            advanced = self.calibration_session.capture(status.observation)
             if target is not None and status.valid:
                 self.log_telemetry_event(
                     "calibration_sample",
@@ -422,6 +425,8 @@ class MainWindow(QMainWindow):
                         ),
                     ),
                 )
+            if advanced:
+                self._log_calibration_quality_events()
             self._refresh_calibration_view_status()
             self._update_calibration_status(status)
             return
@@ -432,6 +437,20 @@ class MainWindow(QMainWindow):
             self._update_gaze_status(status)
             return
         self._update_tracking_status(status)
+
+    def _log_calibration_quality_events(self) -> None:
+        quality = self.calibration_session.target_quality
+        if quality is None:
+            return
+        self.log_telemetry_event(
+            "calibration_target_quality",
+            calibration_target_quality_payload(quality),
+        )
+        if quality.recommendation == "retry":
+            self.log_telemetry_event(
+                "calibration_retry",
+                calibration_target_quality_payload(quality),
+            )
 
     def _validation_is_active(self) -> bool:
         return self.validation_session.state in {
@@ -463,8 +482,17 @@ class MainWindow(QMainWindow):
                 screen_width=screen_width,
                 screen_height=screen_height,
             )
+            self.log_telemetry_event(
+                "validation_sample",
+                validation_sample_payload(target, sample),
+            )
             self.gaze_overlay.show()
-        self.validation_session.capture(sample)
+        advanced = self.validation_session.capture(sample)
+        if advanced and self.validation_session.metrics is not None:
+            self.log_telemetry_event(
+                "validation_metrics",
+                validation_metrics_payload(self.validation_session.metrics),
+            )
         self._update_validation_debug()
 
     def _update_validation_debug(self) -> None:

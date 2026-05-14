@@ -13,7 +13,11 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from pupil_tracker.calibration import CalibrationFitResult
+from pupil_tracker.calibration import (
+    CalibrationFitResult,
+    TimedCalibrationConfig,
+    validation_pattern,
+)
 from pupil_tracker.models import FrameMetadata, GazeSample, RawObservation, Rect, WindowCandidate
 from pupil_tracker.tracking import Frame
 
@@ -74,6 +78,17 @@ class FakeModel:
     ) -> CalibrationFitResult:
         del samples, screen_width, screen_height
         return CalibrationFitResult(sample_count=1, mean_error_px=0.0, max_error_px=0.0)
+
+
+class FakeClock:
+    def __init__(self, now: float = 0.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
 
 
 @pytest.fixture(scope="module")
@@ -251,5 +266,55 @@ def test_live_telemetry_is_noop_until_logging_enabled(
     window.handle_gaze_sample(gaze_sample())
 
     assert not log_path.exists()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_live_validation_logs_sample_and_metrics_without_frame_payload(
+    qt_app: QApplication,
+    tmp_path: Path,
+) -> None:
+    from desktop_demo.calibration_session import CalibrationSessionState
+    from desktop_demo.ui.main_window import MainWindow
+    from desktop_demo.validation_session import ValidationSession
+
+    clock = FakeClock()
+    log_path = tmp_path / "demo.jsonl"
+    validation_session = ValidationSession(
+        targets=validation_pattern()[:1],
+        screen_width=100.0,
+        screen_height=100.0,
+        timing_config=TimedCalibrationConfig(
+            settle_seconds=1.0,
+            capture_seconds=1.0,
+            min_samples_per_target=1,
+        ),
+        clock=clock,
+    )
+    window = MainWindow(
+        telemetry_path=log_path,
+        camera_factory=FakeCamera,
+        tracking_runtime=FakeTrackingRuntime(valid_observation()),
+        gaze_runtime=FakeGazeRuntime(gaze_sample()),
+        validation_session=validation_session,
+        window_provider=lambda: (),
+    )
+    window.calibration_session.state = CalibrationSessionState.COMPLETE
+    window.start_camera()
+    window.start_logging()
+    window.start_validation()
+    clock.advance(1.0)
+    window.update_preview_frame()
+    clock.advance(1.1)
+    window.update_preview_frame()
+    window.stop_logging()
+
+    events = read_events(log_path)
+    event_types = [event["event_type"] for event in events]
+    assert "validation_sample" in event_types
+    assert "validation_metrics" in event_types
+    assert "image" not in json.dumps(events)
+    assert "frame" not in json.dumps(events)
+    assert "feature_vector" not in json.dumps(events)
     window.close()
     qt_app.processEvents()

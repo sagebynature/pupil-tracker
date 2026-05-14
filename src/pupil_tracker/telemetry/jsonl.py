@@ -9,6 +9,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
+from pupil_tracker.calibration import TargetQualitySummary, ValidationMetrics, ValidationTarget
 from pupil_tracker.logging_config import get_logger
 from pupil_tracker.models import CalibrationTarget, GazeSample, RawObservation, WindowCandidate
 
@@ -100,6 +101,52 @@ def calibration_event_payload(
         "target_x": target.x,
         "target_y": target.y,
         "sample_count": sample_count,
+    }
+
+
+def calibration_target_quality_payload(
+    quality: TargetQualitySummary,
+) -> dict[str, Any]:
+    """Serialize target-level calibration quality without observations/features."""
+
+    return {
+        "target_id": quality.target_id,
+        "accepted_count": quality.accepted_count,
+        "rejected_count": quality.rejected_count,
+        "mean_confidence": quality.mean_confidence,
+        "meets_min_samples": quality.meets_min_samples,
+        "recommendation": quality.recommendation,
+    }
+
+
+def validation_metrics_payload(metrics: ValidationMetrics) -> dict[str, Any]:
+    """Serialize post-calibration validation metrics."""
+
+    return {
+        "sample_count": metrics.sample_count,
+        "mean_error_px": metrics.mean_error_px,
+        "median_error_px": metrics.median_error_px,
+        "max_error_px": metrics.max_error_px,
+        "per_target_error_px": dict(metrics.per_target_error_px),
+        "recommendation": metrics.recommendation,
+    }
+
+
+def validation_sample_payload(
+    target: ValidationTarget,
+    sample: GazeSample,
+) -> dict[str, Any]:
+    """Serialize one validation sample without raw frame/image/feature payloads."""
+
+    return {
+        "target_id": target.id,
+        "target_x": target.x,
+        "target_y": target.y,
+        "timestamp": sample.timestamp,
+        "x": sample.x,
+        "y": sample.y,
+        "confidence": sample.confidence,
+        "valid": sample.valid,
     }
 
 

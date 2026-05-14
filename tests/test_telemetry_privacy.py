@@ -13,11 +13,14 @@ import numpy as np
 import pytest
 from PySide6.QtWidgets import QApplication
 
+from pupil_tracker.calibration import TargetQualitySummary, ValidationMetrics
 from pupil_tracker.models import CalibrationTarget, GazeSample, Rect, WindowCandidate
 from pupil_tracker.telemetry import (
     JsonlLogger,
     calibration_event_payload,
+    calibration_target_quality_payload,
     gaze_event_payload,
+    validation_metrics_payload,
     window_candidate_payload,
 )
 
@@ -72,17 +75,40 @@ def test_calibration_gaze_and_window_events_serialize_as_json(tmp_path: Path) ->
         bounds=Rect(x=10.0, y=20.0, width=300.0, height=200.0),
         score=4.0,
     )
+    quality = TargetQualitySummary(
+        target_id="r1c1",
+        accepted_count=20,
+        rejected_count=2,
+        mean_confidence=0.82,
+        meets_min_samples=True,
+        recommendation="advance",
+    )
+    metrics = ValidationMetrics(
+        sample_count=5,
+        mean_error_px=40.0,
+        median_error_px=35.0,
+        max_error_px=80.0,
+        per_target_error_px={"v0": 20.0, "v1": 60.0},
+        recommendation="excellent",
+    )
 
     with JsonlLogger(log_path) as logger:
         logger.write_event("calibration_sample", calibration_event_payload(target, sample_count=3))
+        logger.write_event(
+            "calibration_target_quality",
+            calibration_target_quality_payload(quality),
+        )
         logger.write_event("gaze_sample", gaze_event_payload(gaze_sample))
+        logger.write_event("validation_metrics", validation_metrics_payload(metrics))
         logger.write_event("window_candidate", window_candidate_payload(window))
 
     events = _read_events(log_path)
 
     assert [event["event_type"] for event in events] == [
         "calibration_sample",
+        "calibration_target_quality",
         "gaze_sample",
+        "validation_metrics",
         "window_candidate",
     ]
     assert events[0]["payload"] == {
@@ -91,12 +117,32 @@ def test_calibration_gaze_and_window_events_serialize_as_json(tmp_path: Path) ->
         "target_y": 0.5,
         "sample_count": 3,
     }
-    assert events[2]["payload"] == {
+    assert events[1]["payload"] == {
+        "target_id": "r1c1",
+        "accepted_count": 20,
+        "rejected_count": 2,
+        "mean_confidence": 0.82,
+        "meets_min_samples": True,
+        "recommendation": "advance",
+    }
+    assert events[3]["payload"] == {
+        "sample_count": 5,
+        "mean_error_px": 40.0,
+        "median_error_px": 35.0,
+        "max_error_px": 80.0,
+        "per_target_error_px": {"v0": 20.0, "v1": 60.0},
+        "recommendation": "excellent",
+    }
+    assert events[4]["payload"] == {
         "app_name": "DemoApp",
         "title": "Demo Window",
         "bounds": {"x": 10.0, "y": 20.0, "width": 300.0, "height": 200.0},
         "score": 4.0,
     }
+    event_json = json.dumps(events)
+    assert "image" not in event_json
+    assert "frame" not in event_json
+    assert "feature_vector" not in event_json
 
 
 def test_demo_start_stop_logging_flushes_file(qt_app: QApplication, tmp_path: Path) -> None:
