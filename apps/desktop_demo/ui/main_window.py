@@ -38,6 +38,7 @@ from pupil_tracker.calibration import (
     LinearRidgeCalibrationModel,
     PolynomialRidgeCalibrationModel,
     TimedCalibrationConfig,
+    summarize_feature_diagnostics,
     validation_pattern,
     vertical_grid_pattern,
 )
@@ -48,6 +49,7 @@ from pupil_tracker.telemetry import (
     JsonlLogger,
     calibration_event_payload,
     calibration_target_quality_payload,
+    feature_diagnostics_payload,
     gaze_event_payload,
     raw_observation_event_payload,
     validation_metrics_payload,
@@ -491,6 +493,8 @@ class MainWindow(QMainWindow):
                 )
             if advanced:
                 self._log_calibration_quality_events()
+                if self.calibration_session.state is CalibrationSessionState.COMPLETE:
+                    self._log_calibration_feature_diagnostics()
             self._refresh_calibration_view_status()
             self._update_calibration_status(status)
             return
@@ -515,6 +519,13 @@ class MainWindow(QMainWindow):
                 "calibration_retry",
                 calibration_target_quality_payload(quality),
             )
+
+    def _log_calibration_feature_diagnostics(self) -> None:
+        summary = summarize_feature_diagnostics(self.calibration_session.flow.all_samples())
+        self.log_telemetry_event(
+            "calibration_feature_diagnostics",
+            feature_diagnostics_payload(summary),
+        )
 
     def _validation_is_active(self) -> bool:
         return self.validation_session.state in {

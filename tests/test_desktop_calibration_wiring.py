@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from collections.abc import Iterator
@@ -334,6 +335,90 @@ def test_completed_live_calibration_shows_fit_metrics(qt_app: QApplication) -> N
     assert "Calibration complete" in window.debug_label.text()
     assert "mean error 1.50px" in window.debug_label.text()
     assert not window.calibration_target_overlay.isVisible()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_completed_calibration_logs_feature_diagnostics(
+    qt_app: QApplication,
+    tmp_path: Path,
+) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.main_window import MainWindow
+
+    log_path = tmp_path / "demo.jsonl"
+    model = FakeCalibrationModel()
+    flow = CalibrationFlowState(samples_per_target=1)
+    session = CalibrationSession(flow=flow, model=model, screen_width=1000, screen_height=800)
+    observations = [valid_observation(timestamp=float(index)) for index in range(9)]
+    tracker = FakeTrackingRuntime(observations=observations)
+    window = MainWindow(
+        telemetry_path=log_path,
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        tracking_runtime=tracker,
+        calibration_session=session,
+    )
+    window.start_camera()
+    window.start_logging()
+    window.start_calibration()
+
+    for _ in observations:
+        window.update_preview_frame()
+    window.stop_logging()
+
+    events = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    diagnostic_events = [
+        event
+        for event in events
+        if event["event_type"] == "calibration_feature_diagnostics"
+    ]
+    assert len(diagnostic_events) == 1
+    payload = diagnostic_events[0]["payload"]
+    assert payload["feature_count"] == 2
+    assert payload["targets"]["r0c0"] == {
+        "target_id": "r0c0",
+        "target_x": 0.1,
+        "target_y": 0.1,
+        "accepted_count": 1,
+        "feature_mean": [0.0, 0.1],
+        "feature_std": [0.0, 0.0],
+    }
+    event_json = json.dumps(diagnostic_events)
+    assert "image" not in event_json
+    assert "frame" not in event_json
+    assert "feature_vector" not in event_json
+    window.close()
+    qt_app.processEvents()
+
+
+def test_completed_calibration_skips_feature_diagnostics_when_logging_stopped(
+    qt_app: QApplication,
+    tmp_path: Path,
+) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.main_window import MainWindow
+
+    log_path = tmp_path / "demo.jsonl"
+    session = CalibrationSession(
+        flow=CalibrationFlowState(samples_per_target=1),
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+    )
+    observations = [valid_observation(timestamp=float(index)) for index in range(9)]
+    window = MainWindow(
+        telemetry_path=log_path,
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        tracking_runtime=FakeTrackingRuntime(observations=observations),
+        calibration_session=session,
+    )
+    window.start_camera()
+    window.start_calibration()
+
+    for _ in observations:
+        window.update_preview_frame()
+
+    assert not log_path.exists()
     window.close()
     qt_app.processEvents()
 
