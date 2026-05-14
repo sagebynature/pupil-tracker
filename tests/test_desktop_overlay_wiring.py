@@ -15,7 +15,7 @@ from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication
 
 from pupil_tracker.calibration import ValidationTarget
-from pupil_tracker.models import FrameMetadata, GazeSample, RawObservation
+from pupil_tracker.models import FrameMetadata, GazeSample, RawObservation, Rect, WindowCandidate
 from pupil_tracker.tracking import Frame
 
 APPS_ROOT = Path(__file__).resolve().parents[1] / "apps"
@@ -92,6 +92,15 @@ def valid_sample() -> GazeSample:
         confidence=0.8,
         valid=True,
         region_id="middle_center",
+    )
+
+
+def visible_window() -> WindowCandidate:
+    return WindowCandidate(
+        app_name="DemoApp",
+        title="Demo Window",
+        bounds=Rect(x=90.0, y=180.0, width=200.0, height=160.0),
+        score=1.0,
     )
 
 
@@ -178,6 +187,42 @@ def test_live_calibrated_gaze_updates_overlay(qt_app: QApplication) -> None:
     assert window.gaze_overlay.state.current.x == sample.x
     assert window.gaze_overlay.state.current.y == sample.y
     assert window.gaze_overlay.isVisible() is True
+    window.close()
+    qt_app.processEvents()
+
+
+def test_window_candidate_draws_red_border_state(qt_app: QApplication) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    candidate = visible_window()
+    window = MainWindow(
+        camera_factory=FakeCamera,
+        window_provider=lambda: (candidate,),
+    )
+
+    window.handle_gaze_sample(valid_sample())
+
+    assert window.gaze_overlay.highlighted_window == candidate
+    assert "window DemoApp" in window.debug_label.text()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_missing_window_candidate_clears_red_border_state(qt_app: QApplication) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    window = MainWindow(
+        camera_factory=FakeCamera,
+        window_provider=lambda: (),
+    )
+
+    window.gaze_overlay.update_window_candidate(visible_window())
+    window.handle_gaze_sample(valid_sample())
+    window.handle_gaze_sample(
+        GazeSample(timestamp=2.0, x=0.0, y=0.0, confidence=0.0, valid=False)
+    )
+
+    assert window.gaze_overlay.highlighted_window is None
     window.close()
     qt_app.processEvents()
 

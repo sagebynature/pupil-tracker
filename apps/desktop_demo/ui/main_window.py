@@ -393,7 +393,7 @@ class MainWindow(QMainWindow):
         screen_width, screen_height = self._screen_size()
         self.calibration_session = CalibrationSession(
             flow=flow,
-            model=LinearRidgeCalibrationModel(alpha=0.0),
+            model=LinearRidgeCalibrationModel(alpha=1.0),
             screen_width=screen_width,
             screen_height=screen_height,
             timing_config=TimedCalibrationConfig(),
@@ -569,6 +569,7 @@ class MainWindow(QMainWindow):
                 f"mean X error {metrics.mean_abs_x_error_px:.2f}px | "
                 f"mean Y error {metrics.mean_abs_y_error_px:.2f}px | "
                 f"Y bias {metrics.mean_signed_y_error_px:+.2f}px | "
+                f"grid accuracy {metrics.grid_cell_accuracy:.0%} | "
                 f"max error {metrics.max_error_px:.2f}px | {guidance}"
             )
             self.calibration_view.validation_button.setEnabled(True)
@@ -609,6 +610,7 @@ class MainWindow(QMainWindow):
             self.gaze_overlay.show()
             self._update_window_candidate_status(sample)
         else:
+            self.gaze_overlay.update_window_candidate(None)
             self.gaze_overlay.hide()
 
     def set_heatmap_enabled(self, enabled: bool) -> None:
@@ -653,6 +655,7 @@ class MainWindow(QMainWindow):
             self.debug_label.setText(f"Debug: window unavailable: {error}")
             return
         self.log_telemetry_event("window_candidate", window_candidate_payload(candidate))
+        self.gaze_overlay.update_window_candidate(candidate)
         if candidate is None:
             self.debug_label.setText(
                 f"Debug: gaze {sample.region_id} | confidence {sample.confidence:.2f} | window none"

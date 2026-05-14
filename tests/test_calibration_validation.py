@@ -57,6 +57,8 @@ def test_exact_gaze_at_validation_target_returns_zero_error() -> None:
     assert metrics.mean_abs_y_error_px == 0.0
     assert metrics.mean_signed_y_error_px == 0.0
     assert metrics.per_target_signed_y_error_px == {"v0": 0.0}
+    assert metrics.grid_cell_accuracy == 1.0
+    assert metrics.per_target_grid_cell_accuracy == {"v0": 1.0}
     assert metrics.recommendation == "excellent"
 
 
@@ -100,6 +102,40 @@ def test_validation_metrics_report_per_axis_error() -> None:
     assert metrics.per_target_signed_y_error_px == {
         "v0": pytest.approx(20.0),
         "v1": pytest.approx(-40.0),
+    }
+
+
+def test_validation_metrics_report_grid_cell_accuracy_for_window_selection() -> None:
+    target_top_left, target_top_right, target_center = validation_pattern()[:3]
+
+    metrics = compute_validation_metrics(
+        [
+            ValidationSample(
+                target=target_top_left,
+                gaze_sample=gaze(x=260.0, y=180.0),
+            ),
+            ValidationSample(
+                target=target_top_left,
+                gaze_sample=gaze(x=700.0, y=180.0),
+            ),
+            ValidationSample(
+                target=target_top_right,
+                gaze_sample=gaze(x=770.0, y=180.0),
+            ),
+            ValidationSample(
+                target=target_center,
+                gaze_sample=gaze(x=510.0, y=390.0),
+            ),
+        ],
+        screen_width=900.0,
+        screen_height=600.0,
+    )
+
+    assert metrics.grid_cell_accuracy == pytest.approx(0.75)
+    assert metrics.per_target_grid_cell_accuracy == {
+        "v0": pytest.approx(0.5),
+        "v1": pytest.approx(1.0),
+        "v2": pytest.approx(1.0),
     }
 
 

@@ -13,7 +13,7 @@ from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from pupil_tracker.calibration import ValidationTarget
-from pupil_tracker.models import GazeSample, Point2D
+from pupil_tracker.models import GazeSample, Point2D, WindowCandidate
 from pupil_tracker.screen import GazeHeatmap, HeatmapConfig
 
 _DEFAULT_DOT_RADIUS: Final[float] = 6.0
@@ -183,6 +183,7 @@ class GazeOverlay(QWidget):
         self.validation_state = ValidationOverlayState()
         self.heatmap = GazeHeatmap(HeatmapConfig(screen_width=1.0, screen_height=1.0))
         self.heatmap_enabled = False
+        self.highlighted_window: WindowCandidate | None = None
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -220,6 +221,12 @@ class GazeOverlay(QWidget):
         self.heatmap.clear()
         self.update()
 
+    def update_window_candidate(self, candidate: WindowCandidate | None) -> None:
+        """Update the application window highlighted under the current gaze point."""
+
+        self.highlighted_window = candidate
+        self.update()
+
     def update_validation_sample(
         self,
         *,
@@ -251,6 +258,8 @@ class GazeOverlay(QWidget):
             _draw_validation(painter, validation_current, self.validation_state.trail)
             painter.end()
             return
+        if self.highlighted_window is not None:
+            _draw_window_border(painter, self.highlighted_window)
         current = self.state.current
         if current is not None and current.visible:
             _draw_trail(painter, self.state.trail)
@@ -307,6 +316,13 @@ def _draw_validation(
     painter.drawEllipse(QPointF(current.target.x, current.target.y), 8.0, 8.0)
     if current.prediction is not None:
         _draw_cursor(painter, current.prediction)
+
+
+def _draw_window_border(painter: QPainter, candidate: WindowCandidate) -> None:
+    bounds = candidate.bounds
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setPen(QPen(QColor(255, 40, 40, 230), 4.0))
+    painter.drawRect(QRectF(bounds.x, bounds.y, bounds.width, bounds.height))
 
 
 def _draw_cursor(painter: QPainter, current: CursorRenderState) -> None:

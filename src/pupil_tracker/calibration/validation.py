@@ -44,6 +44,8 @@ class ValidationMetrics:
     mean_abs_y_error_px: float
     mean_signed_y_error_px: float
     per_target_signed_y_error_px: Mapping[str, float]
+    grid_cell_accuracy: float
+    per_target_grid_cell_accuracy: Mapping[str, float]
     recommendation: ValidationRecommendation
 
 
@@ -75,8 +77,10 @@ def compute_validation_metrics(
     abs_x_errors: list[float] = []
     abs_y_errors: list[float] = []
     signed_y_errors: list[float] = []
+    grid_cell_correct: list[bool] = []
     errors_by_target: dict[str, list[float]] = defaultdict(list)
     signed_y_errors_by_target: dict[str, list[float]] = defaultdict(list)
+    grid_cell_correct_by_target: dict[str, list[bool]] = defaultdict(list)
     for sample in samples:
         if not sample.gaze_sample.valid:
             continue
@@ -91,6 +95,16 @@ def compute_validation_metrics(
         signed_y_errors.append(dy)
         errors_by_target[sample.target.id].append(error_px)
         signed_y_errors_by_target[sample.target.id].append(dy)
+        target_cell = _grid_cell_id(target_x, target_y, screen_width, screen_height)
+        gaze_cell = _grid_cell_id(
+            sample.gaze_sample.x,
+            sample.gaze_sample.y,
+            screen_width,
+            screen_height,
+        )
+        matches_target_cell = target_cell == gaze_cell
+        grid_cell_correct.append(matches_target_cell)
+        grid_cell_correct_by_target[sample.target.id].append(matches_target_cell)
 
     if not errors:
         msg = "at least one valid validation sample is required"
@@ -113,8 +127,33 @@ def compute_validation_metrics(
             target_id: sum(target_errors) / len(target_errors)
             for target_id, target_errors in signed_y_errors_by_target.items()
         },
+        grid_cell_accuracy=_fraction_true(grid_cell_correct),
+        per_target_grid_cell_accuracy={
+            target_id: _fraction_true(target_matches)
+            for target_id, target_matches in grid_cell_correct_by_target.items()
+        },
         recommendation=_recommend(mean_error),
     )
+
+
+def _grid_cell_id(
+    x: float,
+    y: float,
+    screen_width: float,
+    screen_height: float,
+    *,
+    columns: int = 3,
+    rows: int = 3,
+) -> str:
+    clamped_x = min(max(x, 0.0), screen_width)
+    clamped_y = min(max(y, 0.0), screen_height)
+    column = min(int(clamped_x / (screen_width / columns)), columns - 1)
+    row = min(int(clamped_y / (screen_height / rows)), rows - 1)
+    return f"r{row}c{column}"
+
+
+def _fraction_true(values: Sequence[bool]) -> float:
+    return sum(1 for value in values if value) / len(values)
 
 
 def _recommend(mean_error_px: float) -> ValidationRecommendation:
