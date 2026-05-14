@@ -91,3 +91,45 @@ def test_insufficient_valid_samples_keeps_current_target() -> None:
     assert not flow.capture_observation(_valid_observation(timestamp=2.0))
     assert flow.current_target == target
     assert len(flow.samples_for_current_target()) == 1
+
+
+def test_add_current_target_sample_stores_without_advancing() -> None:
+    flow = _flow(samples_per_target=1)
+    target = flow.current_target
+
+    assert flow.add_current_target_sample(_valid_observation())
+
+    assert flow.current_target == target
+    assert len(flow.samples_for_current_target()) == 1
+    assert not flow.is_complete
+
+
+def test_advance_target_moves_to_next_target() -> None:
+    flow = _flow(samples_per_target=2)
+
+    assert flow.advance_target()
+
+    target = flow.current_target
+    assert target is not None
+    assert target.id == "r0c1"
+    assert flow.current_index == 1
+
+
+def test_clear_current_target_samples_preserves_previous_targets() -> None:
+    flow = _flow(samples_per_target=5)
+    first_observation = _valid_observation(timestamp=1.0)
+    second_observation = _valid_observation(timestamp=2.0)
+
+    assert flow.add_current_target_sample(first_observation)
+    assert flow.advance_target()
+    assert flow.add_current_target_sample(second_observation)
+
+    flow.clear_current_target_samples()
+
+    current_target = flow.current_target
+    assert current_target is not None
+    assert flow.samples_for_current_target() == ()
+    all_samples = flow.all_samples()
+    assert len(all_samples) == 1
+    assert all_samples[0].target.id == "r0c0"
+    assert all_samples[0].observation == first_observation

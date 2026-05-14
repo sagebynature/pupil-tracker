@@ -47,15 +47,43 @@ class CalibrationFlowState:
         if target is None:
             return False
 
-        stored = self._collector.add(CalibrationSample(target=target, observation=observation))
+        stored = self.add_current_target_sample(observation)
         if not stored:
             return False
 
         if len(self._collector.samples_for(target.id)) < self.samples_per_target:
             return False
 
+        return self.advance_target()
+
+    def add_current_target_sample(self, observation: RawObservation) -> bool:
+        """Store a valid observation for the active target without advancing."""
+
+        target = self.current_target
+        if target is None:
+            return False
+        return self._collector.add(CalibrationSample(target=target, observation=observation))
+
+    def advance_target(self) -> bool:
+        """Advance to the next target and return whether the flow advanced."""
+
+        if self.current_target is None:
+            return False
         self.current_index += 1
         return True
+
+    def clear_current_target_samples(self) -> None:
+        """Clear samples for the active target while preserving previous targets."""
+
+        target = self.current_target
+        if target is None:
+            return
+        retained_samples = [
+            sample for sample in self._collector.all_samples() if sample.target.id != target.id
+        ]
+        self._collector = CalibrationSampleCollector()
+        for sample in retained_samples:
+            self._collector.add(sample)
 
     def samples_for_current_target(self) -> tuple[CalibrationSample, ...]:
         """Return valid samples collected for the current target."""
