@@ -1090,6 +1090,70 @@ Replay on the matched latest validation window did not identify a promotion cand
 
 Decision: the 29-feature live path fails the promotion gate. The new pose scalars are diagnostically useful because they are separable, but appending them directly to the live calibration model regressed aggregate grid accuracy and moved failures into `v3`/`v4`. Do not promote this live feature vector as-is. The implementation now keeps the stable 23-feature vector as the live default and gates the solvePnP-style suffix behind `PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES=true` for replay diagnostics and explicit manual experiments.
 
+## Restored 23-Feature Top-Row Focus Validation
+
+Date: 2026-05-15
+
+A fresh manual run was launched without `PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES=true`, confirming the live replay payloads returned to the stable 23-feature vector.
+
+Run range: `136697:145435`; calibration config line: `136697`; validation metrics line: `145435`; replay feature counts: `23` for all `2844` calibration/validation replay samples.
+
+Live validation metrics:
+
+| Metric | Previous 23-Feature Top-Row Run | 29-Feature Run | Restored 23-Feature Run |
+|---|---:|---:|---:|
+| Mean error | `168.03 px` | `183.72 px` | `169.05 px` |
+| Mean abs X error | `113.81 px` | `55.50 px` | `93.31 px` |
+| Mean abs Y error | `89.15 px` | `165.92 px` | `128.33 px` |
+| Signed Y bias | `+62.35 px` | `-51.03 px` | `-66.18 px` |
+| Grid accuracy | `52.1%` | `27.4%` | `31.1%` |
+| Recommendation | `usable` | `usable` | `usable` |
+
+Target-level grid accuracy:
+
+| Target | Previous 23-Feature Run | 29-Feature Run | Restored 23-Feature Run |
+|---|---:|---:|---:|
+| `v0` | `0.0%` | `0.0%` | `0.0%` |
+| `v1` | `63.2%` | `55.3%` | `55.3%` |
+| `v2` | `100.0%` | `81.6%` | `100.0%` |
+| `v3` | `31.6%` | `0.0%` | `0.0%` |
+| `v4` | `65.8%` | `0.0%` | `0.0%` |
+
+Latest matched validation-window predicted cells:
+
+| Target | Predicted Cells |
+|---|---|
+| `v0` | `r0c0=34`, `r1c0=4` |
+| `v1` | `r0c3=21`, `r0c2=17` |
+| `v2` | `r1c2=38` |
+| `v3` | `r1c1=38` |
+| `v4` | `r1c2=38` |
+
+Top-left separability remains present, but the dominant signal is still pitch/posture rather than a feature-count issue:
+
+```text
+validation_grid_accuracy: 0.0%
+validation_predicted_cells: r0c0=34, r1c0=4
+assessment: separable
+```
+
+Dominant separability features:
+
+| Feature | Normalized Δ |
+|---|---:|
+| `22 pitch proxy` | `+9.67` |
+| `10 left eye aperture` | `+2.07` |
+| `21 yaw proxy` | `-1.94` |
+| `11 right eye aperture` | `+1.76` |
+| `17 face height` | `-1.70` |
+| `15 face center Y` | `+1.64` |
+| `16 face width` | `-1.42` |
+| `0 left iris face-relative X` | `-1.02` |
+
+Replay evaluation on this restored 23-feature run did not find a model promotion candidate. The best grid-first evaluator result was `poly2-alpha-10.0-asymmetric-corrected` at `43.4%` grid accuracy with `488.51 px` mean error and `retry`, while the live model was `31.1%` grid accuracy at `169.05 px`. That wrapper is not promotion-safe.
+
+Decision: the opt-in gate worked technically, but the latest 23-feature run did not recover the earlier `52.1%` live result. The failure is now repeat-run instability/posture drift, not the solvePnP suffix alone. Do not add more calibration targets or promote asymmetric wrappers. The next implementation slice should add a scalar posture-normalized replay/evaluator path or explicit calibration/validation posture-drift diagnostic that compares per-target accepted samples against validation windows before any new live default.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
