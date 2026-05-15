@@ -135,23 +135,27 @@ Latest live validation metrics:
 | 4x3 grid accuracy | `40.0%` |
 | Recommendation | `retry` |
 
-Offline replay model comparison on the same scalar samples:
+Offline replay model comparison on the same scalar samples, sorted by the product objective (`--objective grid`):
 
 | Model | Mean Error | Mean X | Mean Y | Signed Y | Grid Accuracy | Recommendation |
 |---|---:|---:|---:|---:|---:|---|
-| `poly2-alpha-1.0` | 182.55 px | 123.71 px | 101.67 px | +37.17 px | 13.8% | usable |
-| `linear-alpha-0.1` | 187.63 px | 130.74 px | 103.89 px | +30.15 px | 8.8% | usable |
-| `linear-alpha-1.0` | 201.91 px | 114.58 px | 133.37 px | -13.42 px | 19.7% | retry |
+| `linear-alpha-1.0-affine-corrected` | 201.60 px | 116.07 px | 131.88 px | -17.53 px | 32.2% | retry |
 | `poly2-alpha-10.0` | 205.10 px | 115.63 px | 135.89 px | -11.06 px | 26.6% | retry |
+| `linear-alpha-1.0` | 201.91 px | 114.58 px | 133.37 px | -13.42 px | 19.7% | retry |
+| `linear-alpha-1.0-bias-corrected` | 201.91 px | 114.58 px | 133.37 px | -13.42 px | 19.7% | retry |
 | `linear-alpha-10.0` | 235.69 px | 126.19 px | 170.44 px | -19.63 px | 15.3% | retry |
+| `poly2-alpha-1.0` | 182.55 px | 123.71 px | 101.67 px | +37.17 px | 13.8% | usable |
+| `poly2-alpha-1.0-bias-corrected` | 182.55 px | 123.71 px | 101.67 px | +37.17 px | 13.8% | usable |
+| `poly2-alpha-1.0-affine-corrected` | 178.09 px | 124.48 px | 95.74 px | +40.99 px | 13.4% | usable |
+| `linear-alpha-0.1` | 187.63 px | 130.74 px | 103.89 px | +30.15 px | 8.8% | usable |
 | `poly2-alpha-0.1` | 248.63 px | 211.84 px | 104.91 px | +0.19 px | 3.1% | retry |
 
 Interpretation:
 
-1. The offline evaluator is now useful: one manual run compared six model variants without another camera session.
-2. `poly2-alpha-1.0` materially improves pixel error versus live validation (`256.20 px` to `182.55 px`) and reduces mean Y error (`180.68 px` to `101.67 px`).
-3. The same best-by-pixel-error model regresses the practical 4x3 window-selection objective (`40.0%` live grid accuracy to `13.8%` offline grid accuracy).
-4. Do not switch the live model solely to `poly2-alpha-1.0` yet. The next evaluator/modeling slice should optimize for the product objective: grid-cell accuracy first, then pixel error as a secondary metric.
+1. The offline evaluator is now useful: one manual run compared ten model variants without another camera session.
+2. `poly2-alpha-1.0-affine-corrected` gives the lowest pixel error (`178.09 px`) and mean Y error (`95.74 px`), but its grid accuracy is only `13.4%`.
+3. `linear-alpha-1.0-affine-corrected` is the best offline grid candidate at `32.2%`, improving over the uncorrected `linear-alpha-1.0` result (`19.7%`) but still under the latest live validation result (`40.0%`).
+4. Do not promote any corrected offline candidate to the live model yet. Post-fit affine correction is promising enough to keep in the evaluator, but current evidence points to calibration geometry / target sampling as the next higher-leverage slice.
 
 ## Decision Gate
 
@@ -163,7 +167,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px` and offline candidates trade grid accuracy against pixel error. Keep the features for now, but do not treat the current build as ready for dependable window selection until the model objective is tuned for grid-cell accuracy.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay now shows corrected candidates can improve over their base models, but no offline candidate beats the latest live grid result. Keep the features and evaluator corrections for now, but do not treat the current build as ready for dependable window selection until calibration geometry or sampling improves grid-cell accuracy.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
