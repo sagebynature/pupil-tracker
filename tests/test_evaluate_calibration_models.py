@@ -103,6 +103,38 @@ def test_sort_model_results_supports_grid_first_objective() -> None:
     ]
 
 
+def test_corrected_candidates_can_reduce_regularized_mapping_error(tmp_path: Path) -> None:
+    log_path = tmp_path / "demo.jsonl"
+    events = [
+        _replay_event("calibration_replay_sample", target_id="c0", target_x=0.0, target_y=0.0),
+        _replay_event("calibration_replay_sample", target_id="c1", target_x=1.0, target_y=0.0),
+        _replay_event("calibration_replay_sample", target_id="c2", target_x=0.0, target_y=1.0),
+        _replay_event("calibration_replay_sample", target_id="c3", target_x=1.0, target_y=1.0),
+        _replay_event("calibration_replay_sample", target_id="c4", target_x=0.5, target_y=0.5),
+        _replay_event("validation_replay_sample", target_id="v0", target_x=0.25, target_y=0.25),
+        _replay_event("validation_replay_sample", target_id="v1", target_x=0.75, target_y=0.75),
+    ]
+    _write_jsonl(log_path, events)
+    dataset = load_replay_dataset(log_path)
+
+    results = evaluate_replay_models(
+        dataset,
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=4,
+        objective="error",
+    )
+    by_name = {result.model_name: result for result in results}
+
+    assert "linear-alpha-1.0-affine-corrected" in by_name
+    assert "poly2-alpha-1.0-bias-corrected" in by_name
+    assert (
+        by_name["linear-alpha-1.0-affine-corrected"].metrics.mean_error_px
+        < by_name["linear-alpha-1.0"].metrics.mean_error_px
+    )
+
+
 def test_evaluate_replay_models_ranks_models_on_same_samples(tmp_path: Path) -> None:
     log_path = tmp_path / "demo.jsonl"
     events = [

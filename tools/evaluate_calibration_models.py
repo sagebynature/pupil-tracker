@@ -7,7 +7,7 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, NoReturn, cast
+from typing import Any, Literal, NoReturn, Protocol, cast
 
 from pupil_tracker.calibration import (
     LinearRidgeCalibrationModel,
@@ -16,9 +16,35 @@ from pupil_tracker.calibration import (
     ValidationTarget,
     compute_validation_metrics,
 )
-from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObservation
+from pupil_tracker.models import CalibrationSample, CalibrationTarget, GazeSample, RawObservation
 
 EvaluationObjective = Literal["error", "grid"]
+
+
+class _ReplayCalibrationModel(Protocol):
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> Any: ...
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample: ...
+
+
+class _CoordinateCorrector(Protocol):
+    def fit(
+        self,
+        predicted_coordinates: Sequence[tuple[float, float]],
+        expected_coordinates: Sequence[tuple[float, float]],
+    ) -> Any: ...
+
+    def predict(self, coordinates: Sequence[tuple[float, float]]) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -44,6 +70,111 @@ class ModelEvaluationResult:
 
     model_name: str
     metrics: Any
+
+
+class BiasCorrectedCalibrationModel:
+    """Apply a constant residual correction learned from calibration predictions."""
+
+    def __init__(self, base_model: _ReplayCalibrationModel) -> None:
+        self._base_model = base_model
+        self._bias_x = 0.0
+        self._bias_y = 0.0
+
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> Any:
+        result = self._base_model.fit(samples, screen_width, screen_height)
+        residuals = _calibration_prediction_residuals(
+            self._base_model,
+            samples,
+            screen_width,
+            screen_height,
+        )
+        self._bias_x = sum(residual[0] for residual in residuals) / len(residuals)
+        self._bias_y = sum(residual[1] for residual in residuals) / len(residuals)
+        return result
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample:
+        sample = self._base_model.predict(observation, screen_width, screen_height)
+        if not sample.valid:
+            return sample
+        return GazeSample(
+            timestamp=sample.timestamp,
+            x=sample.x + self._bias_x,
+            y=sample.y + self._bias_y,
+            confidence=sample.confidence,
+            valid=True,
+            region_id=sample.region_id,
+        )
+
+
+class AffineCorrectedCalibrationModel:
+    """Apply a 2D affine correction learned from calibration predictions."""
+
+    def __init__(self, base_model: _ReplayCalibrationModel) -> None:
+        self._base_model = base_model
+        self._corrector: _CoordinateCorrector | None = None
+
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> Any:
+        result = self._base_model.fit(samples, screen_width, screen_height)
+        predicted_coordinates: list[tuple[float, float]] = []
+        expected_coordinates: list[tuple[float, float]] = []
+        for sample in samples:
+            if not sample.observation.valid:
+                continue
+            prediction = self._base_model.predict(
+                sample.observation,
+                screen_width,
+                screen_height,
+            )
+            predicted_coordinates.append((prediction.x, prediction.y))
+            expected_coordinates.append(
+                (sample.target.x * screen_width, sample.target.y * screen_height)
+            )
+        if len(predicted_coordinates) < 3:
+            msg = "affine correction requires at least 3 valid calibration samples"
+            raise ValueError(msg)
+        from sklearn.linear_model import LinearRegression
+
+        corrector = cast(_CoordinateCorrector, LinearRegression())
+        corrector.fit(predicted_coordinates, expected_coordinates)
+        self._corrector = corrector
+        return result
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample:
+        if self._corrector is None:
+            msg = "affine-corrected model is not fitted"
+            raise RuntimeError(msg)
+        sample = self._base_model.predict(observation, screen_width, screen_height)
+        if not sample.valid:
+            return sample
+        prediction = self._corrector.predict([(sample.x, sample.y)])[0]
+        return GazeSample(
+            timestamp=sample.timestamp,
+            x=float(prediction[0]),
+            y=float(prediction[1]),
+            confidence=sample.confidence,
+            valid=True,
+            region_id=sample.region_id,
+        )
 
 
 def load_replay_dataset(path: Path) -> ReplayDataset:
@@ -174,15 +305,58 @@ def format_model_evaluation_report(results: Sequence[ModelEvaluationResult]) -> 
     return "\n".join(lines)
 
 
-def _candidate_models() -> tuple[
-    tuple[str, LinearRidgeCalibrationModel | PolynomialRidgeCalibrationModel], ...
-]:
+def _calibration_prediction_residuals(
+    model: _ReplayCalibrationModel,
+    samples: Sequence[CalibrationSample],
+    screen_width: float,
+    screen_height: float,
+) -> tuple[tuple[float, float], ...]:
+    residuals: list[tuple[float, float]] = []
+    for sample in samples:
+        if not sample.observation.valid:
+            continue
+        prediction = model.predict(sample.observation, screen_width, screen_height)
+        residuals.append(
+            (
+                sample.target.x * screen_width - prediction.x,
+                sample.target.y * screen_height - prediction.y,
+            )
+        )
+    if not residuals:
+        msg = "correction requires valid calibration predictions"
+        raise ValueError(msg)
+    return tuple(residuals)
+
+
+def _candidate_models() -> tuple[tuple[str, _ReplayCalibrationModel], ...]:
+    linear_1 = LinearRidgeCalibrationModel(alpha=1.0)
+    poly_1 = PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
     return (
         ("linear-alpha-0.1", LinearRidgeCalibrationModel(alpha=0.1)),
-        ("linear-alpha-1.0", LinearRidgeCalibrationModel(alpha=1.0)),
+        ("linear-alpha-1.0", linear_1),
+        (
+            "linear-alpha-1.0-bias-corrected",
+            BiasCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
+        ),
+        (
+            "linear-alpha-1.0-affine-corrected",
+            AffineCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
+        ),
         ("linear-alpha-10.0", LinearRidgeCalibrationModel(alpha=10.0)),
         ("poly2-alpha-0.1", PolynomialRidgeCalibrationModel(degree=2, alpha=0.1)),
-        ("poly2-alpha-1.0", PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)),
+        ("poly2-alpha-1.0", poly_1),
+        (
+            "poly2-alpha-1.0-bias-corrected",
+            BiasCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
+            ),
+        ),
+        (
+            "poly2-alpha-1.0-affine-corrected",
+            AffineCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
+            ),
+        ),
         ("poly2-alpha-10.0", PolynomialRidgeCalibrationModel(degree=2, alpha=10.0)),
     )
 
