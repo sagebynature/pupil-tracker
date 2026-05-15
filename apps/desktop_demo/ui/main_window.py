@@ -48,11 +48,13 @@ from pupil_tracker.platform import candidate_at_point, list_visible_windows
 from pupil_tracker.telemetry import (
     JsonlLogger,
     calibration_event_payload,
+    calibration_replay_sample_payload,
     calibration_target_quality_payload,
     feature_diagnostics_payload,
     gaze_event_payload,
     raw_observation_event_payload,
     validation_metrics_payload,
+    validation_replay_sample_payload,
     validation_sample_payload,
     window_candidate_payload,
 )
@@ -491,6 +493,10 @@ class MainWindow(QMainWindow):
                         ),
                     ),
                 )
+                self.log_telemetry_event(
+                    "calibration_replay_sample",
+                    calibration_replay_sample_payload(target, status.observation),
+                )
             if advanced:
                 self._log_calibration_quality_events()
                 if self.calibration_session.state is CalibrationSessionState.COMPLETE:
@@ -561,6 +567,10 @@ class MainWindow(QMainWindow):
             self.log_telemetry_event(
                 "validation_sample",
                 validation_sample_payload(target, sample),
+            )
+            self.log_telemetry_event(
+                "validation_replay_sample",
+                validation_replay_sample_payload(target, status.observation),
             )
             self.gaze_overlay.show()
         advanced = self.validation_session.capture(sample)

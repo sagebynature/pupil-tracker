@@ -240,6 +240,7 @@ def test_live_calibration_logs_progress_without_frame_payload(
     event_types = [event["event_type"] for event in events]
     assert "raw_observation" in event_types
     assert "calibration_sample" in event_types
+    assert "calibration_replay_sample" in event_types
     calibration_event = next(
         event for event in events if event["event_type"] == "calibration_sample"
     )
@@ -248,6 +249,19 @@ def test_live_calibration_logs_progress_without_frame_payload(
         "target_x": 0.1,
         "target_y": 0.1,
         "sample_count": 1,
+    }
+    replay_event = next(
+        event for event in events if event["event_type"] == "calibration_replay_sample"
+    )
+    assert replay_event["payload"] == {
+        "target_id": "r0c0",
+        "target_x": 0.1,
+        "target_y": 0.1,
+        "timestamp": 1.0,
+        "valid": True,
+        "confidence": 0.8,
+        "feature_count": 2,
+        "features": [0.1, 0.2],
     }
     assert "image" not in json.dumps(events)
     window.close()
@@ -312,7 +326,21 @@ def test_live_validation_logs_sample_and_metrics_without_frame_payload(
     events = read_events(log_path)
     event_types = [event["event_type"] for event in events]
     assert "validation_sample" in event_types
+    assert "validation_replay_sample" in event_types
     assert "validation_metrics" in event_types
+    replay_event = next(
+        event for event in events if event["event_type"] == "validation_replay_sample"
+    )
+    assert replay_event["payload"] == {
+        "target_id": "v0",
+        "target_x": 0.25,
+        "target_y": 0.25,
+        "timestamp": 1.0,
+        "valid": True,
+        "confidence": 0.8,
+        "feature_count": 2,
+        "features": [0.1, 0.2],
+    }
     assert "image" not in json.dumps(events)
     assert "frame" not in json.dumps(events)
     assert "feature_vector" not in json.dumps(events)
