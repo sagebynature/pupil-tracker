@@ -886,6 +886,53 @@ Interpretation:
 
 Decision: keep the predicted-cell diagnostic in evaluator reports and use it as the gate for the next experiment. Do not promote `poly2-alpha-0.1` live from this replay alone because it still leaves top-row held-out targets collapsed.
 
+## Top-Row Focus Live Validation
+
+Date: 2026-05-15
+
+A logged manual run used the new opt-in `Start Top-Row Focus Calibration` path. This path is experimental and non-default; it adds 33 targets with local 3x3 clusters around both held-out top validation regions.
+
+Run evidence:
+
+- `calibration_config`: line `115925`
+- `validation_metrics`: line `126151`
+- run range analyzed: `115925:126151`
+- calibration path: `top_row_focus`
+- model: `LinearRidgeCalibrationModel`
+- posture gate: disabled
+- screen: `5120x1440`
+- validation grid: `4x3`
+
+Live validation metrics:
+
+| Metric | Value |
+|---|---:|
+| Sample count | `190` |
+| Mean error | `168.03 px` |
+| Median error | `177.59 px` |
+| Max error | `378.96 px` |
+| Mean X error | `113.81 px` |
+| Mean Y error | `89.15 px` |
+| Signed Y bias | `+62.35 px` |
+| 4x3 grid accuracy | `52.1%` |
+| Recommendation | `usable` |
+
+Per-target accepted validation behavior:
+
+| Target | Mean Error | Signed X | Signed Y | Grid Accuracy | Predicted Cells |
+|---|---:|---:|---:|---:|---|
+| `v0` | `242.67 px` | `+25.43 px` | `+236.86 px` | `0.0%` | `r1c1=23`, `r1c0=15` |
+| `v1` | `221.82 px` | `+184.15 px` | `+109.59 px` | `60.5%` | `r0c3=23`, `r1c3=15` |
+| `v2` | `174.31 px` | `+172.96 px` | `+16.78 px` | `100.0%` | `r1c2=38` |
+| `v3` | `63.44 px` | `-26.67 px` | `-43.52 px` | `28.9%` | `r2c0=27`, `r2c1=11` |
+| `v4` | `131.79 px` | `+32.48 px` | `-6.11 px` | `65.8%` | `r2c3=25`, `r2c2=13` |
+
+Compared against the previous decision-aware edge-dense run (`110622:115687`), top-row focus improved practical grid accuracy from `18.0%` to `52.1%` and reduced mean error from `222.19 px` to `168.03 px`. It also recovered `v1`, `v2`, and `v4` materially. The remaining hard failure is still `v0`, which continues to collapse from the top row into `r1c*` despite the new local top-left and top-right target clusters.
+
+Replay-only evaluator on the isolated top-row run ranked `linear-alpha-1.0-vertical-bias-corrected` first by grid objective at `52.2%`, effectively matching live grid accuracy but with much worse pixel error (`528.90 px`) and a `retry` recommendation. That is not a promotion candidate; it confirms only that replay grid scoring sees the same practical ceiling.
+
+Decision: keep top-row focus as an experimental manual path. It is the best live grid result so far, but `v0` remains `0.0%` and still collapses into the second row, so do not change the default 9-point calibration or live model. Next slice should explain why the top-left held-out region remains non-separable even after local geometry: inspect scalar feature separability for the top-left cluster versus `v0`, or add a stronger head-pose/geometry diagnostic before another calibration pattern.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -896,7 +943,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Repeat-run diagnostics show stable top-left collapse into `r1c0` plus unstable right-side vertical shifts (`v1` collapse, `v4` recovery). Calibration-side repeat-run drift now shows balanced sample counts but material movement in eye-relative vertical, face-center-Y, and slope/roll-related signals at edge targets; the report names the dominant drift features directly. The top-left focus geometry corrected `v0` signed Y bias in one run but regressed `v1`, `v3`, and overall live mean error to `328.50 px`, so it is diagnostic only. The first posture-gated edge-dense run improved pixel error to `149.08 px` and reached a `usable` recommendation, but grid accuracy regressed to `34.7%` and no capture samples were rejected at threshold `0.08`; treat that threshold as too permissive, not as validated gating. Keep the features, evaluator corrections, repeat-run diagnostic tooling, edge-dense path, top-left focus path, and opt-in posture gate for now; do not change the default sample window, add live weighting, promote edge-dense/top-left calibration, promote the `0.08` posture threshold, or add another global correction. Prioritize explicit gate-config telemetry and then a stricter posture threshold or pose normalization before more geometry/model tuning.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Repeat-run diagnostics show stable top-left collapse into `r1c0` plus unstable right-side vertical shifts (`v1` collapse, `v4` recovery). Calibration-side repeat-run drift now shows balanced sample counts but material movement in eye-relative vertical, face-center-Y, and slope/roll-related signals at edge targets; the report names the dominant drift features directly. The top-left focus geometry corrected `v0` signed Y bias in one run but regressed `v1`, `v3`, and overall live mean error to `328.50 px`, so it is diagnostic only. The first top-row focus run is the best live grid result so far (`52.1%`, `168.03 px`, `usable`) and recovered `v1`/`v4`, but `v0` remains `0.0%` and collapses into `r1c*`, so it is still diagnostic rather than a default-change signal. The first posture-gated edge-dense run improved pixel error to `149.08 px` and reached a `usable` recommendation, but grid accuracy regressed to `34.7%` and no capture samples were rejected at threshold `0.08`; treat that threshold as too permissive, not as validated gating. Keep the features, evaluator corrections, repeat-run diagnostic tooling, edge-dense path, top-left focus path, top-row focus path, and opt-in posture gate for now; do not change the default sample window, add live weighting, promote experimental geometry, promote a posture threshold, or add another global correction. Prioritize scalar feature-separability diagnostics for the top-left cluster versus `v0`, or move to a stronger head-pose/geometric pose estimate before adding more calibration targets.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
