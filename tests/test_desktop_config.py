@@ -47,6 +47,7 @@ def test_demo_config_defaults_keep_camera_preview_available(
     monkeypatch.delenv("PUPIL_TRACKER_PREVIEW_FPS", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_VALIDATION_GRID_COLUMNS", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_VALIDATION_GRID_ROWS", raising=False)
+    monkeypatch.delenv("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", raising=False)
 
     config = DemoConfig.from_environment()
 
@@ -57,6 +58,7 @@ def test_demo_config_defaults_keep_camera_preview_available(
     assert config.validation_grid_columns == 4
     assert config.validation_grid_rows == 3
     assert config.calibration_sample_window == "all"
+    assert config.gaze_focus_enabled is False
 
 
 def test_demo_config_parses_calibration_sample_window(
@@ -69,6 +71,29 @@ def test_demo_config_parses_calibration_sample_window(
     config = DemoConfig.from_environment()
 
     assert config.calibration_sample_window == "late"
+
+
+def test_demo_config_parses_gaze_focus_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", "true")
+
+    config = DemoConfig.from_environment()
+
+    assert config.gaze_focus_enabled is True
+
+
+def test_demo_config_rejects_invalid_gaze_focus_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", "maybe")
+
+    with pytest.raises(ValueError, match="PUPIL_TRACKER_GAZE_FOCUS_ENABLED"):
+        DemoConfig.from_environment()
 
 
 def test_demo_config_rejects_invalid_calibration_sample_window(
@@ -187,6 +212,7 @@ def test_create_main_window_applies_config_to_camera_and_timer(
         validation_grid_columns=5,
         validation_grid_rows=4,
         calibration_sample_window="late",
+        gaze_focus_enabled=True,
     )
 
     window = demo_app.create_main_window(config=config)
@@ -197,5 +223,6 @@ def test_create_main_window_applies_config_to_camera_and_timer(
     assert window.validation_session.grid_columns == 5
     assert window.validation_session.grid_rows == 4
     assert window.calibration_session.calibration_sample_window == "late"
+    assert window.gaze_focus_enabled is True
     window.stop_camera()
     qt_app.processEvents()

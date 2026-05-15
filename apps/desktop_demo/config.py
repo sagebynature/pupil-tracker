@@ -52,6 +52,16 @@ def _parse_calibration_sample_window(value: str) -> CalibrationSampleWindow:
     raise ValueError(msg)
 
 
+def _parse_bool(value: str, *, name: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    msg = f"{name} must be one of: true, false, 1, 0, yes, no, on, off"
+    raise ValueError(msg)
+
+
 @dataclass(frozen=True)
 class DemoConfig:
     """Configuration values needed by the desktop demo shell."""
@@ -62,6 +72,7 @@ class DemoConfig:
     validation_grid_columns: int = 4
     validation_grid_rows: int = 3
     calibration_sample_window: CalibrationSampleWindow = "all"
+    gaze_focus_enabled: bool = False
 
     @classmethod
     def from_environment(cls) -> DemoConfig:
@@ -80,6 +91,10 @@ class DemoConfig:
         calibration_sample_window = _parse_calibration_sample_window(
             os.environ.get("PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW", "all")
         )
+        gaze_focus_enabled = _parse_bool(
+            os.environ.get("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", "false"),
+            name="PUPIL_TRACKER_GAZE_FOCUS_ENABLED",
+        )
         model_asset_value = os.environ.get("PUPIL_TRACKER_MEDIAPIPE_MODEL")
         model_asset_path = Path(model_asset_value) if model_asset_value else None
         return cls(
@@ -89,6 +104,7 @@ class DemoConfig:
             validation_grid_columns=validation_grid_columns,
             validation_grid_rows=validation_grid_rows,
             calibration_sample_window=calibration_sample_window,
+            gaze_focus_enabled=gaze_focus_enabled,
         )
 
     @property

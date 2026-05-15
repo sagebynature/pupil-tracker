@@ -100,3 +100,4 @@ class WindowCandidate:
     title: str
     bounds: Rect
     score: float
+    process_id: int | None = None

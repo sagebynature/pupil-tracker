@@ -63,6 +63,14 @@ class FakeGazeRuntime:
         return self.sample
 
 
+class FakeWindowActivator:
+    def __init__(self) -> None:
+        self.activated: list[WindowCandidate] = []
+
+    def __call__(self, candidate: WindowCandidate) -> None:
+        self.activated.append(candidate)
+
+
 @pytest.fixture(scope="module")
 def qt_app() -> Iterator[QApplication]:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -161,6 +169,90 @@ def test_window_provider_failure_is_reported_unobtrusively(qt_app: QApplication)
     window.close()
     qt_app.processEvents()
 
+
+
+def test_gaze_focus_disabled_does_not_activate_window_candidate(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    activator = FakeWindowActivator()
+    window = MainWindow(
+        window_provider=lambda: (demo_candidate(),),
+        gaze_focus_enabled=False,
+        window_activator=activator,
+    )
+
+    window.handle_gaze_sample(gaze_sample())
+
+    assert activator.activated == []
+    window.close()
+    qt_app.processEvents()
+
+
+def test_gaze_focus_enabled_activates_window_candidate_once_per_candidate(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    activator = FakeWindowActivator()
+    window = MainWindow(
+        window_provider=lambda: (demo_candidate(),),
+        gaze_focus_enabled=True,
+        window_activator=activator,
+    )
+
+    window.handle_gaze_sample(gaze_sample())
+    window.handle_gaze_sample(gaze_sample())
+
+    assert activator.activated == [demo_candidate()]
+    assert "focus on" in window.gaze_focus_button.text().lower()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_gaze_focus_button_toggles_window_activation(qt_app: QApplication) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    activator = FakeWindowActivator()
+    window = MainWindow(
+        window_provider=lambda: (demo_candidate(),),
+        gaze_focus_enabled=False,
+        window_activator=activator,
+    )
+
+    window.gaze_focus_button.click()
+    window.handle_gaze_sample(gaze_sample())
+    window.gaze_focus_button.click()
+    window.handle_gaze_sample(gaze_sample(x=75.0, y=75.0))
+
+    assert activator.activated == [demo_candidate()]
+    assert "focus off" in window.gaze_focus_button.text().lower()
+    window.close()
+    qt_app.processEvents()
+
+
+def test_gaze_focus_activation_failure_is_reported_unobtrusively(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    def failing_activator(candidate: WindowCandidate) -> None:
+        del candidate
+        raise RuntimeError("activation permission denied")
+
+    window = MainWindow(
+        window_provider=lambda: (demo_candidate(),),
+        gaze_focus_enabled=True,
+        window_activator=failing_activator,
+    )
+
+    window.handle_gaze_sample(gaze_sample())
+
+    assert "focus unavailable" in window.debug_label.text()
+    assert "activation permission denied" in window.debug_label.text()
+    window.close()
+    qt_app.processEvents()
 
 def test_live_calibrated_gaze_updates_window_candidate_debug_text(
     qt_app: QApplication,

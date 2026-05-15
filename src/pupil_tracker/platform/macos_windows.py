@@ -18,6 +18,7 @@ _BOUNDS_KEY: Final = "kCGWindowBounds"
 _LAYER_KEY: Final = "kCGWindowLayer"
 _ALPHA_KEY: Final = "kCGWindowAlpha"
 _ONSCREEN_KEY: Final = "kCGWindowIsOnscreen"
+_OWNER_PID_KEY: Final = "kCGWindowOwnerPID"
 
 
 RawWindowRecord = Mapping[str, Any]
@@ -77,7 +78,14 @@ def _parse_visible_window_record(
 
     app_name = str(record.get(_OWNER_NAME_KEY) or "Unknown")
     title = str(record.get(_WINDOW_NAME_KEY) or "")
-    return WindowCandidate(app_name=app_name, title=title, bounds=bounds, score=score)
+    process_id = _int_value(record, _OWNER_PID_KEY)
+    return WindowCandidate(
+        app_name=app_name,
+        title=title,
+        bounds=bounds,
+        score=score,
+        process_id=process_id,
+    )
 
 
 def _is_visible_record(record: RawWindowRecord) -> bool:
@@ -110,3 +118,10 @@ def _float_value(mapping: Mapping[Any, Any], key: str) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _int_value(mapping: Mapping[Any, Any], key: str) -> int | None:
+    value = mapping.get(key)
+    if value is None:
+        return None
+    return int(value)

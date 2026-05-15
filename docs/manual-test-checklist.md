@@ -10,7 +10,7 @@ Use this checklist for live validation that intentionally touches local hardware
 - [ ] Place the webcam at the expected usage position, centered above or below the active display.
 - [ ] Use stable lighting; avoid strong backlight and glare on glasses.
 - [ ] Confirm you are comfortable granting macOS camera permission to the Python/terminal process.
-- [ ] Do not grant Accessibility permission; it is not needed for the MVP because focus control is intentionally disabled.
+- [ ] Do not grant Accessibility permission for the default scoring path; optional Gaze Focus uses AppKit activation and should report `focus unavailable` if macOS refuses it.
 - [ ] Confirm you have a MediaPipe FaceLandmarker `.task` model file for real tracker-backed calibration. To download the default asset, run `make download-model`.
 
 ## Launch
@@ -29,7 +29,7 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 ```
 
 - [ ] Confirm the app window opens with the title `Pupil Tracker Demo`.
-- [ ] Confirm the UI shows camera controls, calibration/validation controls, heatmap controls, debug text, and telemetry controls.
+- [ ] Confirm the UI shows camera controls, calibration/validation controls, heatmap controls, the Gaze Focus toggle, debug text, and telemetry controls.
 - [ ] Confirm the UI includes the experimental Start Edge-Dense Calibration control for replay-backed geometry checks.
 - [ ] Confirm the camera is not active until Start Camera is clicked.
 - [ ] If the model variable is missing, confirm Start Calibration shows setup guidance mentioning `PUPIL_TRACKER_MEDIAPIPE_MODEL` instead of crashing.
@@ -59,7 +59,8 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 - [ ] Confirm the debug text updates the 3x3 region plausibly.
 - [ ] Open one or more visible app windows and confirm the debug text shows a plausible window candidate.
 - [ ] Confirm the transparent overlay draws a red border around the current candidate window.
-- [ ] Confirm no app is focused, raised, clicked, or activated by gaze.
+- [ ] Confirm no app is focused, raised, clicked, or activated by gaze while Gaze Focus is off.
+- [ ] Optional: turn Gaze Focus on and confirm the current candidate app is activated when gaze lands on it; turn it back off before continuing accuracy diagnostics.
 
 ## Camera Preview
 
@@ -139,7 +140,10 @@ Use this path only when comparing calibration geometry against a clean 9-point b
 - [ ] Confirm the likely app/window title shown in debug output is plausible.
 - [ ] Confirm a red border appears around the likely candidate window while valid gaze is over it.
 - [ ] Overlap windows and confirm the frontmost/visible candidate is preferred.
-- [ ] Confirm no app is focused, raised, clicked, or activated by gaze.
+- [ ] Confirm no app is focused, raised, clicked, or activated by gaze while Gaze Focus is off.
+- [ ] Turn Gaze Focus on and confirm the candidate app comes forward without synthesizing a click.
+- [ ] Keep gaze on the same candidate and confirm repeated activation does not visibly spam focus changes.
+- [ ] Turn Gaze Focus off and confirm candidate border/debug output continues without activating apps.
 
 - [ ] For replay-backed late-window validation, launch with `PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=late PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
 - [ ] Keep the default `PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=all` unless the late-window manual run improves practical grid/window selection.

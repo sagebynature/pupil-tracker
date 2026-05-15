@@ -291,7 +291,7 @@ Future validation:
 ## Non-Goals for MVP
 
 - Pixel-perfect cursor / mouse replacement.
-- Actually focusing or raising application windows.
+- Focus-by-gaze as a default behavior; activation must stay explicit opt-in.
 - Windows/Linux packaging or support.
 - Wayland global overlay/focus behavior.
 - Video/frame recording by default.
@@ -301,7 +301,8 @@ Future validation:
 ## Resolved Implementation Choices
 
 - License: MIT.
-- macOS window enumeration: CoreGraphics via `pyobjc-framework-quartz`; no Accessibility permission is needed for MVP enumeration/scoring.
+- macOS window enumeration: CoreGraphics via `pyobjc-framework-quartz`; no Accessibility permission is needed for enumeration/scoring.
+- Optional gaze-to-focus: explicit opt-in via UI/env flag; AppKit activates the candidate's owning process by CoreGraphics owner PID and does not synthesize clicks.
 - MediaPipe integration: the installed MediaPipe package exposes the Tasks API, so the backend uses FaceLandmarker-style adapters and injectable fakes in tests.
 - Demo telemetry: JSONL under ignored `metrics/`, enabled only by explicit Start Logging / Stop Logging controls.
 
@@ -310,4 +311,4 @@ Future validation:
 - Whether to support multiple monitors immediately after MVP.
 - Packaging strategy: editable/developer app first vs packaged `.app` early.
 - How to wire the live runtime pipeline into the demo shell for a polished end-to-end run.
-- Whether future gaze-to-focus work should use Accessibility API, AppleScript, AppKit, or a separate user-approved controller.
+- Whether gaze focus should later add dwell thresholds, per-app allowlists, or Accessibility-backed per-window activation.

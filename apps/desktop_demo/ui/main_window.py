@@ -49,7 +49,11 @@ from pupil_tracker.calibration import (
 )
 from pupil_tracker.camera import CameraError, OpenCVCamera
 from pupil_tracker.models import CalibrationTarget, GazeSample, Point2D, WindowCandidate
-from pupil_tracker.platform import candidate_at_point, list_visible_windows
+from pupil_tracker.platform import (
+    activate_window_candidate,
+    candidate_at_point,
+    list_visible_windows,
+)
 from pupil_tracker.telemetry import (
     JsonlLogger,
     calibration_event_payload,
@@ -102,6 +106,12 @@ class WindowProvider(Protocol):
     """Provider for visible window candidates under the gaze point."""
 
     def __call__(self) -> tuple[WindowCandidate, ...]: ...
+
+
+class WindowActivator(Protocol):
+    """Side-effecting focus action for a gaze-selected window candidate."""
+
+    def __call__(self, candidate: WindowCandidate) -> None: ...
 
 
 class CameraPreviewWorker(QObject):
@@ -168,10 +178,12 @@ class MainWindow(QMainWindow):
         validation_session: ValidationSession | None = None,
         gaze_runtime: GazeRuntimeLike | None = None,
         window_provider: WindowProvider | None = None,
+        window_activator: WindowActivator | None = None,
         model_asset_path: Path | None = None,
         validation_grid_columns: int = 4,
         validation_grid_rows: int = 3,
         calibration_sample_window: CalibrationSampleWindow = "all",
+        gaze_focus_enabled: bool = False,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -188,6 +200,13 @@ class MainWindow(QMainWindow):
         self.window_provider = (
             window_provider if window_provider is not None else list_visible_windows
         )
+        self.window_activator = (
+            window_activator
+            if window_activator is not None
+            else activate_window_candidate
+        )
+        self.gaze_focus_enabled = gaze_focus_enabled
+        self._last_activated_window_key: tuple[Any, ...] | None = None
         self.gaze_overlay = GazeOverlay()
         self.telemetry_path = (
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
@@ -217,6 +236,10 @@ class MainWindow(QMainWindow):
         self.show_heatmap_button = QPushButton("Show Heatmap")
         self.show_heatmap_button.setCheckable(True)
         self.clear_heatmap_button = QPushButton("Clear Heatmap")
+        self.gaze_focus_button = QPushButton()
+        self.gaze_focus_button.setCheckable(True)
+        self.gaze_focus_button.setChecked(self.gaze_focus_enabled)
+        self._sync_gaze_focus_button_text()
         self.calibration_view = CalibrationView(
             flow=(
                 cast(CalibrationFlowState, calibration_session.flow)
@@ -257,6 +280,7 @@ class MainWindow(QMainWindow):
         self.stop_logging_button.clicked.connect(self.stop_logging)
         self.show_heatmap_button.toggled.connect(self.set_heatmap_enabled)
         self.clear_heatmap_button.clicked.connect(self.clear_heatmap)
+        self.gaze_focus_button.toggled.connect(self.set_gaze_focus_enabled)
         self.calibration_view.start_button.clicked.connect(self.start_calibration)
         self.calibration_view.vertical_calibration_button.clicked.connect(
             self.start_vertical_calibration
@@ -273,6 +297,7 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.stop_logging_button)
         controls.addWidget(self.show_heatmap_button)
         controls.addWidget(self.clear_heatmap_button)
+        controls.addWidget(self.gaze_focus_button)
         controls.addStretch(1)
 
         layout = QVBoxLayout()
@@ -708,6 +733,48 @@ class MainWindow(QMainWindow):
         self.gaze_overlay.clear_heatmap()
         self.debug_label.setText("Heatmap cleared")
 
+    def set_gaze_focus_enabled(self, enabled: bool) -> None:
+        """Toggle opt-in gaze-selected window activation."""
+
+        self.gaze_focus_enabled = enabled
+        self._last_activated_window_key = None
+        self.gaze_focus_button.setChecked(enabled)
+        self._sync_gaze_focus_button_text()
+        self.debug_label.setText(
+            "Gaze focus enabled" if enabled else "Gaze focus disabled"
+        )
+
+    def _sync_gaze_focus_button_text(self) -> None:
+        self.gaze_focus_button.setText(
+            "Gaze Focus ON" if self.gaze_focus_enabled else "Gaze Focus OFF"
+        )
+
+    def _activate_window_candidate_if_enabled(self, candidate: WindowCandidate) -> bool:
+        if not self.gaze_focus_enabled:
+            return True
+        activation_key = self._window_candidate_activation_key(candidate)
+        if activation_key == self._last_activated_window_key:
+            return True
+        try:
+            self.window_activator(candidate)
+        except Exception as error:
+            self.debug_label.setText(f"Debug: focus unavailable: {error}")
+            return False
+        self._last_activated_window_key = activation_key
+        return True
+
+    @staticmethod
+    def _window_candidate_activation_key(candidate: WindowCandidate) -> tuple[Any, ...]:
+        return (
+            candidate.process_id,
+            candidate.app_name,
+            candidate.title,
+            candidate.bounds.x,
+            candidate.bounds.y,
+            candidate.bounds.width,
+            candidate.bounds.height,
+        )
+
     def _update_window_candidate_status(self, sample: GazeSample) -> None:
         """Update debug output with the current visible window candidate."""
 
@@ -722,9 +789,12 @@ class MainWindow(QMainWindow):
         self.log_telemetry_event("window_candidate", window_candidate_payload(candidate))
         self.gaze_overlay.update_window_candidate(candidate)
         if candidate is None:
+            self._last_activated_window_key = None
             self.debug_label.setText(
                 f"Debug: gaze {sample.region_id} | confidence {sample.confidence:.2f} | window none"
             )
+            return
+        if not self._activate_window_candidate_if_enabled(candidate):
             return
         title = f" — {candidate.title}" if candidate.title else ""
         self.debug_label.setText(

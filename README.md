@@ -2,9 +2,9 @@
 
 A webcam-first pupil and gaze tracking library with a macOS desktop demo application.
 
-The MVP provides a Python library plus PySide6/Qt demo shell for coarse gaze tracking experiments: webcam capture, MediaPipe-based iris/face observations, timed quality-gated 9-point calibration, post-calibration validation metrics, polynomial/ridge gaze calibration, 3x3 screen-region mapping, confidence-aware transparent gaze/validation overlays, a gaze heatmap, macOS visible-window candidate scoring, and opt-in JSONL telemetry.
+The MVP provides a Python library plus PySide6/Qt demo shell for coarse gaze tracking experiments: webcam capture, MediaPipe-based iris/face observations, timed quality-gated 9-point calibration, post-calibration validation metrics, polynomial/ridge gaze calibration, 3x3 screen-region mapping, confidence-aware transparent gaze/validation overlays, a gaze heatmap, macOS visible-window candidate scoring, opt-in gaze-to-focus, and opt-in JSONL telemetry.
 
-The future product direction is gaze-assisted application window focus. The MVP deliberately does not focus, raise, click, or activate windows.
+Gaze-assisted application focus is available only behind the explicit Gaze Focus toggle or `PUPIL_TRACKER_GAZE_FOCUS_ENABLED=true`. The default demo path still observes windows without focusing, raising, clicking, or activating them.
 
 ## Status
 
@@ -23,10 +23,10 @@ Implemented library/demo areas:
 - OpenCV camera source.
 - MediaPipe Tasks/FaceLandmarker-backed tracker adapter with injectable fakes for tests.
 - Synchronous runtime pipeline for camera/backend/calibration/smoothing/region mapping.
-- PySide6 desktop demo shell with camera, calibration, validation, overlay, heatmap, and telemetry controls.
+- PySide6 desktop demo shell with camera, calibration, validation, overlay, heatmap, opt-in gaze focus, and telemetry controls.
 - Transparent confidence-aware gaze overlay and validation target/prediction/error-line overlay.
 - Gaze trail and heatmap verification helpers for live accuracy checks.
-- macOS CoreGraphics visible-window enumeration and pure candidate scoring.
+- macOS CoreGraphics visible-window enumeration, pure candidate scoring, and separate opt-in AppKit application activation.
 - Privacy-conscious JSONL telemetry with no frame/video payloads by default.
 
 ## Requirements
@@ -38,7 +38,7 @@ Implemented library/demo areas:
 - macOS camera permission for live camera usage.
 - A MediaPipe FaceLandmarker model asset for real MediaPipe Tasks inference when using the default backend path.
 
-Accessibility permission is not required for the MVP because the app does not focus, raise, activate, click, or control other windows. Future gaze-to-focus work may require Accessibility permission.
+Accessibility permission is not required for candidate scoring. The optional Gaze Focus mode uses AppKit application activation, does not synthesize clicks, and reports an in-app `focus unavailable` status if macOS refuses activation.
 
 ## Setup
 
@@ -102,8 +102,9 @@ Expected manual path:
 6. Click Start Validation and follow the validation targets.
 7. Confirm target dot, predicted dot, error line, and validation metrics are understandable.
 8. Move gaze around the screen and confirm overlay, 3x3 region, heatmap, and window-candidate debug text update plausibly.
-9. If logging is enabled, confirm JSONL telemetry contains scalar events only and no frame/image payloads.
-10. Stop Camera or close the app and confirm camera/tracker/overlay/log resources are released.
+9. Optional: enable Gaze Focus and confirm the app under the current gaze candidate comes forward; disable it before continuing accuracy diagnostics if focus changes are distracting.
+10. If logging is enabled, confirm JSONL telemetry contains scalar events only and no frame/image payloads.
+11. Stop Camera or close the app and confirm camera/tracker/overlay/log resources are released.
 
 Manual live testing should follow `docs/manual-test-checklist.md`.
 
@@ -139,6 +140,8 @@ Calibration targets are shown fullscreen because the fitted model maps observati
 Start Edge-Dense Calibration is an experimental, non-default geometry check for top-row and edge/corner failures seen in replay analysis. It uses 17 targets: denser top/bottom edge rows, upper/lower quadrant points aligned with validation hot spots, and middle left/center/right anchors. Use it for a fresh logged manual validation run before changing live defaults.
 
 For longer live checks, enable Show Heatmap and stare at fixed points. The heatmap should cluster where you hold your gaze. Use Clear Heatmap between trials.
+
+Gaze Focus is off by default. Turn on the Gaze Focus button, or launch with `PUPIL_TRACKER_GAZE_FOCUS_ENABLED=true`, to immediately activate the current visible-window candidate when calibrated gaze lands on it. The activation path is app-level focus by macOS process id; it does not click inside the target app and it avoids repeated activation while gaze remains on the same candidate.
 
 ## Privacy and Telemetry
 

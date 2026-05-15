@@ -45,7 +45,16 @@ def test_point_inside_one_window_returns_that_candidate() -> None:
     assert candidate is not None
     assert candidate.app_name == "Notes"
     assert candidate.title == "Plan"
+    assert candidate.process_id is None
 
+
+def test_window_record_process_id_is_preserved_when_available() -> None:
+    record = _record(app_name="Notes", title="Plan")
+    record["kCGWindowOwnerPID"] = 4242
+
+    candidates = visible_window_candidates([record])
+
+    assert candidates[0].process_id == 4242
 
 def test_overlapping_windows_choose_higher_frontmost_score() -> None:
     candidates = visible_window_candidates([
