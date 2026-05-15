@@ -159,7 +159,7 @@ Use the report to compare top/center/bottom feature deltas before adding new gaz
 After a fresh logged calibration and validation run, compare calibration model variants offline with:
 
 ```bash
-uv run python tools/evaluate_calibration_models.py metrics/demo.jsonl --screen-width 1512 --screen-height 982 --grid-columns 4 --grid-rows 3
+uv run python tools/evaluate_calibration_models.py metrics/demo.jsonl --screen-width 1512 --screen-height 982 --grid-columns 4 --grid-rows 3 --objective grid
 ```
 
 Use the same screen dimensions as the manual run. The evaluator uses only `calibration_replay_sample` and `validation_replay_sample` scalar payloads, so it can compare candidate models without saving frames or re-running the camera session.

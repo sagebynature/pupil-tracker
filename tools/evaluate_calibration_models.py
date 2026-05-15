@@ -7,7 +7,7 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NoReturn, cast
+from typing import Any, Literal, NoReturn, cast
 
 from pupil_tracker.calibration import (
     LinearRidgeCalibrationModel,
@@ -17,6 +17,8 @@ from pupil_tracker.calibration import (
     compute_validation_metrics,
 )
 from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObservation
+
+EvaluationObjective = Literal["error", "grid"]
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,7 @@ def evaluate_replay_models(
     screen_height: float,
     grid_columns: int,
     grid_rows: int,
+    objective: EvaluationObjective = "error",
 ) -> tuple[ModelEvaluationResult, ...]:
     """Fit candidate models on replay calibration samples and score validation samples."""
 
@@ -126,6 +129,26 @@ def evaluate_replay_models(
             grid_rows=grid_rows,
         )
         results.append(ModelEvaluationResult(model_name=model_name, metrics=metrics))
+    return sort_model_results(results, objective=objective)
+
+
+def sort_model_results(
+    results: Sequence[ModelEvaluationResult],
+    *,
+    objective: EvaluationObjective,
+) -> tuple[ModelEvaluationResult, ...]:
+    """Sort model results by the chosen objective."""
+
+    if objective == "grid":
+        return tuple(
+            sorted(
+                results,
+                key=lambda result: (
+                    -result.metrics.grid_cell_accuracy,
+                    result.metrics.mean_error_px,
+                ),
+            )
+        )
     return tuple(sorted(results, key=lambda result: result.metrics.mean_error_px))
 
 
@@ -297,6 +320,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--screen-height", type=float, required=True)
     parser.add_argument("--grid-columns", type=int, default=4)
     parser.add_argument("--grid-rows", type=int, default=3)
+    parser.add_argument(
+        "--objective",
+        choices=("grid", "error"),
+        default="grid",
+        help="Rank models by grid-cell accuracy or mean pixel error.",
+    )
     args = parser.parse_args(argv)
     try:
         dataset = load_replay_dataset(args.log_path)
@@ -306,6 +335,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             screen_height=args.screen_height,
             grid_columns=args.grid_columns,
             grid_rows=args.grid_rows,
+            objective=args.objective,
         )
     except ValueError as error:
         _die(str(error))

@@ -5,15 +5,18 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 TOOLS_ROOT = Path(__file__).resolve().parents[1] / "tools"
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
 
 from evaluate_calibration_models import (  # noqa: E402
+    ModelEvaluationResult,
     evaluate_replay_models,
     format_model_evaluation_report,
     load_replay_dataset,
+    sort_model_results,
 )
 
 
@@ -67,6 +70,37 @@ def test_load_replay_dataset_reads_calibration_and_validation_samples(tmp_path: 
     assert dataset.calibration_samples[0].target.id == "c0"
     assert dataset.validation_observations[0].target.id == "v0"
     assert dataset.validation_observations[0].observation.feature_vector == (0.5, 0.5)
+
+
+def test_sort_model_results_supports_grid_first_objective() -> None:
+    results = (
+        ModelEvaluationResult(
+            model_name="low-error-low-grid",
+            metrics=SimpleNamespace(mean_error_px=10.0, grid_cell_accuracy=0.25),
+        ),
+        ModelEvaluationResult(
+            model_name="high-error-high-grid",
+            metrics=SimpleNamespace(mean_error_px=50.0, grid_cell_accuracy=0.75),
+        ),
+        ModelEvaluationResult(
+            model_name="tie-grid-better-error",
+            metrics=SimpleNamespace(mean_error_px=40.0, grid_cell_accuracy=0.75),
+        ),
+    )
+
+    grid_sorted = sort_model_results(results, objective="grid")
+    error_sorted = sort_model_results(results, objective="error")
+
+    assert [result.model_name for result in grid_sorted] == [
+        "tie-grid-better-error",
+        "high-error-high-grid",
+        "low-error-low-grid",
+    ]
+    assert [result.model_name for result in error_sorted] == [
+        "low-error-low-grid",
+        "tie-grid-better-error",
+        "high-error-high-grid",
+    ]
 
 
 def test_evaluate_replay_models_ranks_models_on_same_samples(tmp_path: Path) -> None:
