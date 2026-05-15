@@ -290,6 +290,77 @@ class VerticalBiasCorrectedCalibrationModel:
         )
 
 
+class AsymmetricRegionCorrectedCalibrationModel:
+    """Apply quadrant-specific residual corrections learned from calibration predictions."""
+
+    def __init__(self, base_model: _ReplayCalibrationModel) -> None:
+        self._base_model = base_model
+        self._region_biases: dict[str, tuple[float, float]] = {}
+        self._global_bias = (0.0, 0.0)
+        self._fitted = False
+
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> Any:
+        result = self._base_model.fit(samples, screen_width, screen_height)
+        residuals_by_region: dict[str, list[tuple[float, float]]] = defaultdict(list)
+        all_residuals: list[tuple[float, float]] = []
+        for sample in samples:
+            if not sample.observation.valid:
+                continue
+            prediction = self._base_model.predict(
+                sample.observation,
+                screen_width,
+                screen_height,
+            )
+            if not prediction.valid:
+                continue
+            residual = (
+                sample.target.x * screen_width - prediction.x,
+                sample.target.y * screen_height - prediction.y,
+            )
+            region = _asymmetric_region_id(sample.target.x, sample.target.y)
+            residuals_by_region[region].append(residual)
+            all_residuals.append(residual)
+        if not all_residuals:
+            msg = "asymmetric correction requires valid calibration predictions"
+            raise ValueError(msg)
+        self._global_bias = _mean_pair(all_residuals)
+        self._region_biases = {
+            region: _mean_pair(residuals)
+            for region, residuals in residuals_by_region.items()
+            if residuals
+        }
+        self._fitted = True
+        return result
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample:
+        if not self._fitted:
+            msg = "asymmetric-corrected model is not fitted"
+            raise RuntimeError(msg)
+        sample = self._base_model.predict(observation, screen_width, screen_height)
+        if not sample.valid:
+            return sample
+        region = _asymmetric_region_id(sample.x / screen_width, sample.y / screen_height)
+        bias_x, bias_y = self._region_biases.get(region, self._global_bias)
+        return GazeSample(
+            timestamp=sample.timestamp,
+            x=sample.x + bias_x,
+            y=sample.y + bias_y,
+            confidence=sample.confidence,
+            valid=True,
+            region_id=sample.region_id,
+        )
+
+
 class AffineCorrectedCalibrationModel:
     """Apply a 2D affine correction learned from calibration predictions."""
 
@@ -594,6 +665,19 @@ def _grid_cell_id(
     return f"r{row}c{column}"
 
 
+def _asymmetric_region_id(normalized_x: float, normalized_y: float) -> str:
+    horizontal = "left" if normalized_x < 0.5 else "right"
+    vertical = "top" if normalized_y < 0.5 else "bottom"
+    return f"{vertical}_{horizontal}"
+
+
+def _mean_pair(values: Sequence[tuple[float, float]]) -> tuple[float, float]:
+    return (
+        sum(value[0] for value in values) / len(values),
+        sum(value[1] for value in values) / len(values),
+    )
+
+
 def evaluate_replay_models(
     dataset: ReplayDataset,
     *,
@@ -771,7 +855,14 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
     linear_1 = LinearRidgeCalibrationModel(alpha=1.0)
     poly_1 = PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
     base_candidates = (
-        ReplayModelCandidate("linear-alpha-0.1", LinearRidgeCalibrationModel(alpha=0.1)),
+        ReplayModelCandidate(
+            "linear-alpha-0.1",
+            LinearRidgeCalibrationModel(alpha=0.1),
+        ),
+        ReplayModelCandidate(
+            "linear-alpha-0.1-asymmetric-corrected",
+            AsymmetricRegionCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=0.1)),
+        ),
         ReplayModelCandidate(
             "linear-alpha-0.1-per-band-corrected",
             PerBandCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=0.1)),
@@ -781,6 +872,10 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
             VerticalBiasCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=0.1)),
         ),
         ReplayModelCandidate("linear-alpha-1.0", linear_1),
+        ReplayModelCandidate(
+            "linear-alpha-1.0-asymmetric-corrected",
+            AsymmetricRegionCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
+        ),
         ReplayModelCandidate(
             "linear-alpha-1.0-per-band-corrected",
             PerBandCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
@@ -803,6 +898,12 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
             PolynomialRidgeCalibrationModel(degree=2, alpha=0.1),
         ),
         ReplayModelCandidate("poly2-alpha-1.0", poly_1),
+        ReplayModelCandidate(
+            "poly2-alpha-1.0-asymmetric-corrected",
+            AsymmetricRegionCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
+            ),
+        ),
         ReplayModelCandidate(
             "poly2-alpha-1.0-per-band-corrected",
             PerBandCorrectedCalibrationModel(
@@ -830,6 +931,12 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
         ReplayModelCandidate(
             "poly2-alpha-10.0",
             PolynomialRidgeCalibrationModel(degree=2, alpha=10.0),
+        ),
+        ReplayModelCandidate(
+            "poly2-alpha-10.0-asymmetric-corrected",
+            AsymmetricRegionCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=10.0)
+            ),
         ),
         ReplayModelCandidate(
             "poly2-alpha-10.0-per-band-corrected",

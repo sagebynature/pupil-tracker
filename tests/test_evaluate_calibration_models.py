@@ -13,6 +13,7 @@ if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
 
 from evaluate_calibration_models import (  # noqa: E402
+    AsymmetricRegionCorrectedCalibrationModel,
     ModelEvaluationResult,
     PerBandCorrectedCalibrationModel,
     VerticalBiasCorrectedCalibrationModel,
@@ -225,6 +226,75 @@ def test_vertical_bias_correction_reduces_y_mapping_error() -> None:
     assert corrected_top.x == 50.0
     assert abs(corrected_top.y - 0.0) < 1e-9
     assert abs(corrected_bottom.y - 100.0) < 1e-9
+
+
+def test_asymmetric_region_correction_applies_quadrant_residuals() -> None:
+    model = AsymmetricRegionCorrectedCalibrationModel(FeatureCoordinateModel())
+    calibration_samples = (
+        CalibrationSample(
+            target=CalibrationTarget(id="top_left", x=0.1, y=0.1),
+            observation=RawObservation(
+                timestamp=1.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(30.0, 30.0),
+            ),
+        ),
+        CalibrationSample(
+            target=CalibrationTarget(id="top_right", x=0.9, y=0.1),
+            observation=RawObservation(
+                timestamp=2.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(70.0, 30.0),
+            ),
+        ),
+        CalibrationSample(
+            target=CalibrationTarget(id="bottom_left", x=0.1, y=0.9),
+            observation=RawObservation(
+                timestamp=3.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(30.0, 70.0),
+            ),
+        ),
+        CalibrationSample(
+            target=CalibrationTarget(id="bottom_right", x=0.9, y=0.9),
+            observation=RawObservation(
+                timestamp=4.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(70.0, 70.0),
+            ),
+        ),
+    )
+
+    model.fit(calibration_samples, screen_width=100.0, screen_height=100.0)
+    corrected_top_left = model.predict(
+        RawObservation(
+            timestamp=5.0,
+            valid=True,
+            confidence=0.9,
+            feature_vector=(25.0, 25.0),
+        ),
+        screen_width=100.0,
+        screen_height=100.0,
+    )
+    corrected_bottom_right = model.predict(
+        RawObservation(
+            timestamp=6.0,
+            valid=True,
+            confidence=0.9,
+            feature_vector=(75.0, 75.0),
+        ),
+        screen_width=100.0,
+        screen_height=100.0,
+    )
+
+    assert corrected_top_left.x == 5.0
+    assert corrected_top_left.y == 5.0
+    assert corrected_bottom_right.x == 95.0
+    assert corrected_bottom_right.y == 95.0
 
 
 def test_target_weighting_policies_expand_expected_targets() -> None:
@@ -576,6 +646,40 @@ def test_evaluate_replay_models_includes_vertical_bias_correction_candidates(
         "linear-alpha-1.0-vertical-bias-corrected",
         "poly2-alpha-1.0-vertical-bias-corrected",
         "poly2-alpha-10.0-vertical-bias-corrected",
+    } <= result_names
+
+
+def test_evaluate_replay_models_includes_asymmetric_correction_candidates(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "demo.jsonl"
+    events = [
+        _replay_event("calibration_replay_sample", target_id="c0", target_x=0.0, target_y=0.0),
+        _replay_event("calibration_replay_sample", target_id="c1", target_x=1.0, target_y=0.0),
+        _replay_event("calibration_replay_sample", target_id="c2", target_x=0.0, target_y=1.0),
+        _replay_event("calibration_replay_sample", target_id="c3", target_x=1.0, target_y=1.0),
+        _replay_event("calibration_replay_sample", target_id="c4", target_x=0.5, target_y=0.5),
+        _replay_event("validation_replay_sample", target_id="v0", target_x=0.25, target_y=0.25),
+        _replay_event("validation_replay_sample", target_id="v1", target_x=0.75, target_y=0.75),
+    ]
+    _write_jsonl(log_path, events)
+    dataset = load_replay_dataset(log_path)
+
+    results = evaluate_replay_models(
+        dataset,
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=4,
+        objective="grid",
+    )
+
+    result_names = {result.model_name for result in results}
+    assert {
+        "linear-alpha-0.1-asymmetric-corrected",
+        "linear-alpha-1.0-asymmetric-corrected",
+        "poly2-alpha-1.0-asymmetric-corrected",
+        "poly2-alpha-10.0-asymmetric-corrected",
     } <= result_names
 
 

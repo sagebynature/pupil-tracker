@@ -582,6 +582,56 @@ Interpretation:
 
 Decision: keep the calibration-side drift diagnostics in the repeat-run tool. Do not promote edge-dense calibration or add another global correction from these two runs. Next higher-leverage slice should compare a fresh controlled repeat run with stricter head/camera posture, now that dominant feature names are visible directly in the report.
 
+## Third Edge-Dense Live Validation and Asymmetric Replay Check
+
+Date: 2026-05-15
+
+A third logged edge-dense run spans lines `64478`-`69737`. The live validation metrics at line `69737` were:
+
+| Metric | Third Edge-Dense |
+|---|---:|
+| Sample count | `190` |
+| Mean error | `221.95 px` |
+| Median error | `237.66 px` |
+| Max error | `499.99 px` |
+| Mean X error | `143.69 px` |
+| Mean Y error | `138.07 px` |
+| Signed Y bias | `-33.76 px` |
+| 4x3 grid accuracy | `42.1%` |
+| Recommendation | `retry` |
+
+Third-run per-target validation behavior from the live metrics:
+
+| Target | Mean Error | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|
+| `v0` | `312.50 px` | `+216.12 px` | `0.0%` |
+| `v1` | `260.15 px` | `+39.85 px` | `100.0%` |
+| `v2` | `72.03 px` | `-1.56 px` | `100.0%` |
+| `v3` | `128.94 px` | `-116.68 px` | `10.5%` |
+| `v4` | `336.14 px` | `-306.54 px` | `0.0%` |
+
+Added evaluator-only `*-asymmetric-corrected` candidates. These fit the base model, learn quadrant-specific calibration residuals from scalar replay data, and apply the matching top/bottom + left/right residual at prediction time. This is intentionally replay-only; no live calibration behavior changed.
+
+Replay comparison across the three edge-dense ranges:
+
+| Run | Window | Best candidate | Best grid | Best mean error | Top asymmetric candidate | Asym grid | Asym mean error |
+|---|---|---|---:|---:|---|---:|---:|
+| `53454:59073` | `all` | `linear-alpha-1.0-asymmetric-corrected` | `32.2%` | `622.34 px` | `linear-alpha-1.0-asymmetric-corrected` | `32.2%` | `622.34 px` |
+| `53454:59073` | `middle` | `poly2-alpha-10.0-vertical-bias-corrected` | `46.6%` | `495.89 px` | `poly2-alpha-1.0-asymmetric-corrected` | `37.8%` | `495.61 px` |
+| `59074:64477` | `all` | `poly2-alpha-0.1` | `28.7%` | `649.82 px` | `linear-alpha-1.0-asymmetric-corrected` | `19.2%` | `693.98 px` |
+| `59074:64477` | `late` | `poly2-alpha-1.0-bias-corrected` | `37.2%` | `516.08 px` | `poly2-alpha-1.0-asymmetric-corrected` | `18.9%` | `585.66 px` |
+| `64478:69737` | `all` | `poly2-alpha-1.0-affine-corrected` | `56.9%` | `417.56 px` | `poly2-alpha-1.0-asymmetric-corrected` | `47.5%` | `597.37 px` |
+| `64478:69737` | `late` | `linear-alpha-0.1-weight-vertical_edges` | `48.7%` | `457.30 px` | `poly2-alpha-1.0-asymmetric-corrected` | `43.4%` | `458.29 px` |
+
+Interpretation:
+
+1. The third live edge-dense run improves grid accuracy slightly over the first two runs (`42.1%` live), but remains `retry` and still leaves `v0` and `v4` at `0.0%` grid accuracy.
+2. The stable top-left failure persists across all three runs. Repeat-run diagnostics show `v0` remains mostly one row too low: `r1c0=38`, `r1c0=38`, then `r0c0=7` / `r1c0=31`.
+3. Asymmetric quadrant correction does not produce a repeatable promotion candidate. It wins one replay/window by grid only while carrying extreme pixel error, loses badly on the second run, and trails the best replay candidates on the third run.
+4. The third run's best replay result (`all` + `poly2-alpha-1.0-affine-corrected`, `56.9%`) is interesting but not live-promotable from a single noisy run, especially with unresolved `v0`/`v4` live failures.
+
+Decision: keep the asymmetric replay candidates for comparison only. Do not promote edge-dense calibration, asymmetric correction, affine correction, target weighting, or a sample-window change to live behavior yet. The next high-leverage code slice should test a true geometry experiment for the stable top-left collapse, or add a controlled head/camera posture gate before more model wrappers.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
