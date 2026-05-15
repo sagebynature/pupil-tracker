@@ -1189,6 +1189,52 @@ Interpretation:
 3. The top driver changes across runs (`v0` yaw to pitch, `v3` pitch to roll, `v4` pitch) point to repeat-run head/posture state shifts during validation rather than a missing feature-count or sample-count problem.
 4. Decision: keep this as diagnostic evidence only. Do not promote top-row focus, solvePnP-style suffixes, or residual wrappers. The next implementation slice should be a scalar posture-stability replay/gating experiment that asks whether accepted validation windows outside their calibration posture envelope can be identified before model/default changes.
 
+## Posture Envelope Replay/Gating Diagnostic
+
+Date: 2026-05-15
+
+The posture drift tool now has a scalar-only envelope replay mode. It compares the latest accepted validation metrics window against each validation target's nearest accepted calibration target cluster and reports which validation samples fall outside the calibration min/max envelope for selected scalar features. This is diagnostic only; it does not change calibration defaults or live gating.
+
+Command:
+
+```bash
+uv run python tools/analyze_posture_validation_drift.py metrics/demo.jsonl \
+  --run 115925:126151 \
+  --run 136697:145435 \
+  --screen-width 5120 \
+  --screen-height 1440 \
+  --grid-columns 4 \
+  --grid-rows 3 \
+  --posture-envelope \
+  --envelope-padding 0.01
+```
+
+Posture-only envelope features: `20 roll proxy`, `21 yaw proxy`, `22 pitch proxy`; padding: `0.010000`.
+
+| Run | Target | Outside Envelope | Grid Accuracy | Predicted Cells | Top Breach |
+|---|---|---:|---:|---|---|
+| `115925:126151` | `v0` | `38/38` (`100.0%`) | `0.0%` | `r1c0=15`, `r1c1=23` | `21 yaw proxy`, max excess `-0.031221` |
+| `115925:126151` | `v1` | `38/38` (`100.0%`) | `60.5%` | `r0c3=23`, `r1c3=15` | `21 yaw proxy`, max excess `+0.065628` |
+| `115925:126151` | `v2` | `33/38` (`86.8%`) | `100.0%` | `r1c2=38` | `21 yaw proxy`, max excess `-0.004091` |
+| `115925:126151` | `v3` | `3/38` (`7.9%`) | `28.9%` | `r2c0=27`, `r2c1=11` | `21 yaw proxy`, max excess `+0.001160` |
+| `115925:126151` | `v4` | `38/38` (`100.0%`) | `65.8%` | `r2c2=13`, `r2c3=25` | `20 roll proxy`, max excess `-0.017818` |
+| `136697:145435` | `v0` | `38/38` (`100.0%`) | `0.0%` | `r0c0=34`, `r1c0=4` | `22 pitch proxy`, max excess `+0.009460` |
+| `136697:145435` | `v1` | `38/38` (`100.0%`) | `55.3%` | `r0c2=17`, `r0c3=21` | `20 roll proxy`, max excess `-0.044606` |
+| `136697:145435` | `v2` | `38/38` (`100.0%`) | `100.0%` | `r1c2=38` | `21 yaw proxy`, max excess `-0.016398` |
+| `136697:145435` | `v3` | `24/38` (`63.2%`) | `0.0%` | `r1c1=38` | `20 roll proxy`, max excess `+0.007585` |
+| `136697:145435` | `v4` | `0/38` (`0.0%`) | `0.0%` | `r1c2=38` | `-` |
+
+A context-envelope replay for the latest run adds face center/size/aspect features (`14-18`) with the same `0.01` padding. That flags `v4` as partially outside-envelope: `10/38` samples (`26.3%`), driven by `18 face aspect ratio` max excess `+0.007613` and `17 face height` max excess `-0.003763`.
+
+Interpretation:
+
+1. A zero-padding posture envelope is too strict because it marks every validation target outside the extremely narrow calibration min/max ranges. Padding is required for a useful replay gate.
+2. With `0.01` posture padding, hard collapses `v0` and `v3` in the restored run are identifiable before model changes: `v0` is entirely outside the posture envelope and `v3` is mostly outside.
+3. The `v4` hard collapse is not captured by posture-only indices at `0.01`; it becomes visible only when face aspect/height context features are added, and even then only partially. This argues against a posture-only live gate as the next default.
+4. Non-collapsed targets can also sit outside the posture envelope (`v1`, `v2`), so outside-envelope status is a risk signal, not a direct rejection rule yet.
+
+Decision: keep envelope replay as scalar diagnostic evidence. Do not promote a live posture gate solely from this replay. If a controlled live gate is added later, it should log accepted/rejected counts and probably include posture plus face context features, with a conservative threshold validated by grid accuracy and per-target regressions.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:

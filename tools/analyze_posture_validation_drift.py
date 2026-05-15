@@ -131,7 +131,54 @@ class PostureValidationDriftAnalysis:
     grid_rows: int
 
 
+@dataclass(frozen=True)
+class FeatureEnvelopeBreach:
+    """Validation samples outside one calibration feature envelope."""
+
+    feature_index: int
+    feature_name: str
+    calibration_range: tuple[float, float]
+    validation_range: tuple[float, float]
+    outside_sample_count: int
+    outside_sample_rate: float
+    max_excess: float
+
+
+@dataclass(frozen=True)
+class TargetPostureEnvelopeReplay:
+    """Posture-envelope replay summary for one validation target."""
+
+    target_id: str
+    nearest_calibration_target_id: str
+    calibration_target_ids: tuple[str, ...]
+    calibration_sample_count: int
+    validation_sample_count: int
+    outside_envelope_count: int
+    outside_envelope_rate: float
+    validation_grid_accuracy: float
+    predicted_cell_counts: Mapping[str, int]
+    feature_breaches: tuple[FeatureEnvelopeBreach, ...]
+    flags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PostureEnvelopeReplayAnalysis:
+    """Replay estimate of validation samples outside calibration posture envelopes."""
+
+    label: str
+    start_line: int
+    end_line: int
+    targets: Mapping[str, TargetPostureEnvelopeReplay]
+    screen_width: float
+    screen_height: float
+    grid_columns: int
+    grid_rows: int
+    envelope_feature_indices: tuple[int, ...]
+    envelope_padding: float
+
+
 class _TargetedRow(Protocol):
+
     @property
     def target_id(self) -> str: ...
 
@@ -285,6 +332,144 @@ def analyze_posture_validation_drift_log(
     )
 
 
+def analyze_posture_envelope_replay_log(
+    path: Path,
+    *,
+    run_range: RunRange,
+    screen_width: float,
+    screen_height: float,
+    grid_columns: int = 4,
+    grid_rows: int = 3,
+    envelope_feature_indices: Sequence[int] = POSTURE_FEATURE_INDICES,
+    envelope_padding: float = 0.0,
+) -> PostureEnvelopeReplayAnalysis:
+    """Estimate which validation samples fall outside calibration posture envelopes."""
+
+    if screen_width <= 0 or screen_height <= 0:
+        msg = "screen dimensions must be positive"
+        raise ValueError(msg)
+    if grid_columns <= 0 or grid_rows <= 0:
+        msg = "grid dimensions must be positive"
+        raise ValueError(msg)
+    if envelope_padding < 0.0:
+        msg = "envelope padding must be non-negative"
+        raise ValueError(msg)
+    selected_feature_indices = tuple(envelope_feature_indices)
+    if not selected_feature_indices:
+        msg = "at least one envelope feature index is required"
+        raise ValueError(msg)
+    if any(index < 0 for index in selected_feature_indices):
+        msg = "envelope feature indices must be non-negative"
+        raise ValueError(msg)
+
+    calibration_rows: list[FeatureRow] = []
+    validation_feature_rows: list[FeatureRow] = []
+    validation_prediction_rows: list[ValidationPredictionRow] = []
+    metrics_window: MetricsWindow | None = None
+
+    with path.open(encoding="utf-8") as log_file:
+        for line_number, line in enumerate(log_file, start=1):
+            if line_number < run_range.start_line:
+                continue
+            if line_number > run_range.end_line:
+                break
+            event = _parse_event(line, line_number=line_number)
+            event_type = event.get("event_type")
+            raw_payload = event.get("payload")
+            if not isinstance(raw_payload, Mapping):
+                continue
+            payload = cast(Mapping[object, object], raw_payload)
+            if event_type == "calibration_replay_sample":
+                row = _parse_feature_row(payload, line_number=line_number)
+                if row is not None and _calibration_sample_is_accepted(payload):
+                    calibration_rows.append(row)
+                continue
+            if event_type == "validation_replay_sample":
+                row = _parse_feature_row(payload, line_number=line_number)
+                if row is not None:
+                    validation_feature_rows.append(row)
+                continue
+            if event_type == "validation_sample":
+                row = _parse_validation_prediction_row(
+                    payload,
+                    line_number=line_number,
+                    screen_width=screen_width,
+                    screen_height=screen_height,
+                    grid_columns=grid_columns,
+                    grid_rows=grid_rows,
+                )
+                if row is not None:
+                    validation_prediction_rows.append(row)
+                continue
+            if event_type == "validation_metrics":
+                sample_count = _as_int(
+                    payload.get("sample_count"), field="sample_count", line_number=line_number
+                )
+                metrics_window = (
+                    len(validation_feature_rows),
+                    len(validation_prediction_rows),
+                    sample_count,
+                    _metrics_target_ids(payload),
+                )
+
+    if not calibration_rows:
+        msg = "no accepted calibration replay samples found"
+        raise ValueError(msg)
+    _validate_envelope_feature_indices(selected_feature_indices, calibration_rows)
+
+    selected_validation_features = _select_metrics_sample_window(
+        validation_feature_rows,
+        metrics_window,
+        row_count_index=0,
+    )
+    selected_validation_predictions = _select_metrics_sample_window(
+        validation_prediction_rows,
+        metrics_window,
+        row_count_index=1,
+    )
+    if not selected_validation_predictions:
+        msg = "no validation samples found in metrics window"
+        raise ValueError(msg)
+
+    calibration_rows_by_target = _group_by_target(calibration_rows)
+    validation_features_by_target = _group_by_target(selected_validation_features)
+    validation_predictions_by_target = _group_by_target(selected_validation_predictions)
+
+    targets: dict[str, TargetPostureEnvelopeReplay] = {}
+    for target_id, prediction_rows in sorted(validation_predictions_by_target.items()):
+        feature_rows = validation_features_by_target.get(target_id, [])
+        if not feature_rows:
+            msg = f"no validation replay samples found for {target_id!r}"
+            raise ValueError(msg)
+        if len(feature_rows) != len(prediction_rows):
+            msg = (
+                f"validation prediction/sample count mismatch for {target_id!r}: "
+                f"{len(prediction_rows)} predictions vs {len(feature_rows)} feature rows"
+            )
+            raise ValueError(msg)
+        targets[target_id] = _analyze_target_posture_envelope(
+            target_id=target_id,
+            validation_feature_rows=feature_rows,
+            validation_prediction_rows=prediction_rows,
+            calibration_rows_by_target=calibration_rows_by_target,
+            envelope_feature_indices=selected_feature_indices,
+            envelope_padding=envelope_padding,
+        )
+
+    return PostureEnvelopeReplayAnalysis(
+        label=run_range.label,
+        start_line=run_range.start_line,
+        end_line=run_range.end_line,
+        targets=targets,
+        screen_width=screen_width,
+        screen_height=screen_height,
+        grid_columns=grid_columns,
+        grid_rows=grid_rows,
+        envelope_feature_indices=selected_feature_indices,
+        envelope_padding=envelope_padding,
+    )
+
+
 def format_posture_validation_drift_report(analysis: PostureValidationDriftAnalysis) -> str:
     """Format posture/validation drift analysis as scalar Markdown tables."""
 
@@ -379,6 +564,57 @@ def format_posture_validation_drift_run_comparison(
     return "\n".join(lines)
 
 
+def format_posture_envelope_replay_report(analysis: PostureEnvelopeReplayAnalysis) -> str:
+    """Format validation-vs-calibration posture envelope replay as scalar Markdown."""
+
+    feature_labels = ", ".join(
+        f"{index} {_feature_name(index)}" for index in analysis.envelope_feature_indices
+    )
+    lines = [
+        "## Posture envelope replay",
+        "",
+        f"run: {analysis.label}",
+        f"lines: {analysis.start_line}-{analysis.end_line}",
+        f"screen: {analysis.screen_width:.0f}x{analysis.screen_height:.0f}",
+        f"grid: {analysis.grid_columns}x{analysis.grid_rows}",
+        f"envelope features: {feature_labels}",
+        f"envelope padding: {analysis.envelope_padding:.6f}",
+        "",
+        "| Target | Calibration Cluster | Cal Samples | Outside Envelope | "
+        "Outside Rate | Grid Accuracy | Predicted Cells | Flags |",
+        "|---|---|---:|---:|---:|---:|---|---|",
+    ]
+    for target in analysis.targets.values():
+        lines.append(
+            "| "
+            f"{target.target_id} | "
+            f"{', '.join(target.calibration_target_ids)} | "
+            f"{target.calibration_sample_count} | "
+            f"{target.outside_envelope_count}/{target.validation_sample_count} | "
+            f"{target.outside_envelope_rate:.1%} | "
+            f"{target.validation_grid_accuracy:.1%} | "
+            f"{_format_counts(target.predicted_cell_counts)} | "
+            f"{_format_flags(target.flags)} |"
+        )
+    lines.extend(
+        (
+            "",
+            "### Envelope feature breaches",
+            "",
+            "| Target | Feature | Cal Range | Val Range | Outside Samples | "
+            "Outside Rate | Max Excess |",
+            "|---|---|---|---|---:|---:|---:|",
+        )
+    )
+    for target in analysis.targets.values():
+        if not target.feature_breaches:
+            lines.append(f"| {target.target_id} | - | - | - | 0 | 0.0% | 0.000000 |")
+            continue
+        for breach in target.feature_breaches:
+            lines.append(_format_feature_envelope_breach_row(target.target_id, breach))
+    return "\n".join(lines)
+
+
 def _is_target_outlier(target: TargetPostureValidationDrift) -> bool:
     return (
         "posture-drift-grid-collapse" in target.flags
@@ -444,6 +680,168 @@ def _analyze_target_drift(
         dominant_feature_deltas=dominant_deltas,
         flags=flags,
     )
+
+
+def _analyze_target_posture_envelope(
+    *,
+    target_id: str,
+    validation_feature_rows: Sequence[FeatureRow],
+    validation_prediction_rows: Sequence[ValidationPredictionRow],
+    calibration_rows_by_target: Mapping[str, Sequence[FeatureRow]],
+    envelope_feature_indices: Sequence[int],
+    envelope_padding: float,
+) -> TargetPostureEnvelopeReplay:
+    target_x = validation_feature_rows[0].target_x
+    target_y = validation_feature_rows[0].target_y
+    nearest_target_id, calibration_cluster_rows = _nearest_calibration_cluster(
+        target_x,
+        target_y,
+        calibration_rows_by_target,
+    )
+    calibration_summary = _summarize_features(calibration_cluster_rows)
+    validation_summary = _summarize_features(validation_feature_rows)
+    breaches = tuple(
+        sorted(
+            (
+                _feature_envelope_breach(
+                    feature_index=index,
+                    calibration_summary=calibration_summary,
+                    validation_summary=validation_summary,
+                    validation_feature_rows=validation_feature_rows,
+                    envelope_padding=envelope_padding,
+                )
+                for index in envelope_feature_indices
+            ),
+            key=_envelope_breach_sort_key,
+        )
+    )
+    material_breaches = tuple(breach for breach in breaches if breach.outside_sample_count > 0)
+    outside_count = sum(
+        1
+        for row in validation_feature_rows
+        if _row_outside_envelope(
+            row,
+            calibration_summary=calibration_summary,
+            feature_indices=envelope_feature_indices,
+            envelope_padding=envelope_padding,
+        )
+    )
+    predicted_cell_counts = Counter(row.predicted_cell for row in validation_prediction_rows)
+    validation_grid_accuracy = sum(
+        1 for row in validation_prediction_rows if row.matches_target_cell
+    ) / len(validation_prediction_rows)
+    flags = _posture_envelope_flags(
+        outside_envelope_count=outside_count,
+        validation_grid_accuracy=validation_grid_accuracy,
+    )
+    calibration_target_ids = tuple(sorted({row.target_id for row in calibration_cluster_rows}))
+    return TargetPostureEnvelopeReplay(
+        target_id=target_id,
+        nearest_calibration_target_id=nearest_target_id,
+        calibration_target_ids=calibration_target_ids,
+        calibration_sample_count=calibration_summary.sample_count,
+        validation_sample_count=len(validation_feature_rows),
+        outside_envelope_count=outside_count,
+        outside_envelope_rate=outside_count / len(validation_feature_rows),
+        validation_grid_accuracy=validation_grid_accuracy,
+        predicted_cell_counts=dict(sorted(predicted_cell_counts.items())),
+        feature_breaches=material_breaches,
+        flags=flags,
+    )
+
+
+def _feature_envelope_breach(
+    *,
+    feature_index: int,
+    calibration_summary: FeatureDistribution,
+    validation_summary: FeatureDistribution,
+    validation_feature_rows: Sequence[FeatureRow],
+    envelope_padding: float,
+) -> FeatureEnvelopeBreach:
+    lower = calibration_summary.feature_min[feature_index] - envelope_padding
+    upper = calibration_summary.feature_max[feature_index] + envelope_padding
+    outside_count = 0
+    max_excess = 0.0
+    for row in validation_feature_rows:
+        excess = _feature_envelope_excess(row.features[feature_index], lower, upper)
+        if excess != 0.0:
+            outside_count += 1
+        if abs(excess) > abs(max_excess):
+            max_excess = excess
+    return FeatureEnvelopeBreach(
+        feature_index=feature_index,
+        feature_name=_feature_name(feature_index),
+        calibration_range=(
+            calibration_summary.feature_min[feature_index],
+            calibration_summary.feature_max[feature_index],
+        ),
+        validation_range=(
+            validation_summary.feature_min[feature_index],
+            validation_summary.feature_max[feature_index],
+        ),
+        outside_sample_count=outside_count,
+        outside_sample_rate=outside_count / len(validation_feature_rows),
+        max_excess=max_excess,
+    )
+
+
+def _feature_envelope_excess(value: float, lower: float, upper: float) -> float:
+    if value < lower:
+        return value - lower
+    if value > upper:
+        return value - upper
+    return 0.0
+
+
+def _row_outside_envelope(
+    row: FeatureRow,
+    *,
+    calibration_summary: FeatureDistribution,
+    feature_indices: Sequence[int],
+    envelope_padding: float,
+) -> bool:
+    return any(
+        _feature_envelope_excess(
+            row.features[index],
+            calibration_summary.feature_min[index] - envelope_padding,
+            calibration_summary.feature_max[index] + envelope_padding,
+        )
+        != 0.0
+        for index in feature_indices
+    )
+
+
+def _posture_envelope_flags(
+    *,
+    outside_envelope_count: int,
+    validation_grid_accuracy: float,
+) -> tuple[str, ...]:
+    if outside_envelope_count == 0:
+        return ()
+    flags: list[str] = []
+    if validation_grid_accuracy == 0.0:
+        flags.append("posture-envelope-grid-collapse")
+    flags.append("posture-outside-envelope")
+    return tuple(flags)
+
+
+def _envelope_breach_sort_key(breach: FeatureEnvelopeBreach) -> tuple[int, float, int]:
+    return (-breach.outside_sample_count, -abs(breach.max_excess), breach.feature_index)
+
+
+def _validate_envelope_feature_indices(
+    feature_indices: Sequence[int],
+    rows: Sequence[FeatureRow],
+) -> None:
+    feature_count = len(rows[0].features)
+    for row in rows:
+        if len(row.features) != feature_count:
+            msg = "feature rows have inconsistent lengths"
+            raise ValueError(msg)
+    for index in feature_indices:
+        if index >= feature_count:
+            msg = f"envelope feature index {index} is out of range for {feature_count} features"
+            raise ValueError(msg)
 
 
 def _nearest_calibration_cluster(
@@ -745,6 +1143,22 @@ def _format_feature_delta_row(target_id: str, delta: FeatureDriftDelta) -> str:
     )
 
 
+def _format_feature_envelope_breach_row(
+    target_id: str,
+    breach: FeatureEnvelopeBreach,
+) -> str:
+    return (
+        "| "
+        f"{target_id} | "
+        f"{breach.feature_index} {breach.feature_name} | "
+        f"{_format_range(breach.calibration_range)} | "
+        f"{_format_range(breach.validation_range)} | "
+        f"{breach.outside_sample_count} | "
+        f"{breach.outside_sample_rate:.1%} | "
+        f"{breach.max_excess:+.6f} |"
+    )
+
+
 def _format_range(value_range: tuple[float, float]) -> str:
     return f"{value_range[0]:.6f}..{value_range[1]:.6f}"
 
@@ -835,9 +1249,50 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--grid-columns", type=int, default=4)
     parser.add_argument("--grid-rows", type=int, default=3)
     parser.add_argument("--dominant-feature-count", type=int, default=6)
+    parser.add_argument(
+        "--posture-envelope",
+        action="store_true",
+        help="Emit validation-vs-calibration posture envelope replay instead of drift report",
+    )
+    parser.add_argument(
+        "--envelope-feature-index",
+        action="append",
+        type=int,
+        help="Feature index to include in posture envelope replay; repeatable",
+    )
+    parser.add_argument(
+        "--envelope-padding",
+        type=float,
+        default=0.0,
+        help="Non-negative padding added to calibration min/max envelopes",
+    )
     args = parser.parse_args(argv)
 
     try:
+        if args.posture_envelope:
+            feature_indices = (
+                tuple(args.envelope_feature_index)
+                if args.envelope_feature_index is not None
+                else POSTURE_FEATURE_INDICES
+            )
+            envelope_analyses = tuple(
+                analyze_posture_envelope_replay_log(
+                    args.log_path,
+                    run_range=parse_run_range(run),
+                    screen_width=args.screen_width,
+                    screen_height=args.screen_height,
+                    grid_columns=args.grid_columns,
+                    grid_rows=args.grid_rows,
+                    envelope_feature_indices=feature_indices,
+                    envelope_padding=args.envelope_padding,
+                )
+                for run in args.run
+            )
+            for index, analysis in enumerate(envelope_analyses):
+                if index:
+                    print()
+                print(format_posture_envelope_replay_report(analysis))
+            return 0
         analyses = tuple(
             analyze_posture_validation_drift_log(
                 args.log_path,
