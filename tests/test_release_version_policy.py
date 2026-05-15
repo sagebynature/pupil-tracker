@@ -52,14 +52,37 @@ def test_project_metadata_marks_core_library_cross_platform() -> None:
     assert "pyobjc-framework-quartz>=10.0; sys_platform == 'darwin'" in project["dependencies"]
 
 
-def test_publish_workflow_builds_and_publishes_from_ubuntu() -> None:
-    workflow = (PROJECT_ROOT / ".github" / "workflows" / "publish.yml").read_text(
+def test_ci_workflow_runs_checks_on_ubuntu_without_macos_gate() -> None:
+    workflows_dir = PROJECT_ROOT / ".github" / "workflows"
+    workflow = (workflows_dir / "ci.yml").read_text(encoding="utf-8")
+
+    assert not (workflows_dir / "publish.yml").exists()
+    assert "name: CI" in workflow
+    assert "pull_request:" in workflow
+    assert "runs-on: ubuntu-latest" in workflow
+    assert "run: make check" in workflow
+    assert "macos-latest" not in workflow
+
+
+def test_release_workflow_semantic_releases_and_publishes_from_ubuntu() -> None:
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
 
-    assert "  macos-check:\n    name: macOS checks\n    runs-on: macos-latest" in workflow
-    assert "  build:\n    name: Build PyPI distributions\n    runs-on: ubuntu-latest" in workflow
-    assert "  publish:\n    name: Publish to PyPI\n    runs-on: ubuntu-latest" in workflow
+    assert "name: Release & Publish" in workflow
+    assert "branches: [main]" in workflow
+    assert "python-semantic-release/python-semantic-release@" in workflow
+    assert "runs-on: ubuntu-latest" in workflow
+    assert "uses: pypa/gh-action-pypi-publish@release/v1" in workflow
+    assert "macos-latest" not in workflow
+
+
+def test_semantic_release_updates_project_version() -> None:
+    pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    semantic_release = pyproject["tool"]["semantic_release"]
+    assert semantic_release["version_toml"] == ["pyproject.toml:project.version"]
+    assert semantic_release["upload_to_pypi"] is False
 
 
 def test_release_tag_must_match_project_version(tmp_path: Path) -> None:

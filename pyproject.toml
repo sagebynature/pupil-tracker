@@ -64,3 +64,12 @@ line-ending = "auto"
 python-version = "3.11"
 python-platform = "macos"
 root = ["./src", "./apps", "./tests", "./tools"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+major_on_zero = true
+upload_to_pypi = false
+commit_message = "{version}\n\n[skip ci]"
+
+[tool.semantic_release.branches.main]
+match = "main"
