@@ -1009,6 +1009,25 @@ The local correction slightly reduced mean error and signed Y bias for the linea
 
 Decision: stop adding residual wrappers for this failure. The next slice should add stronger scalar geometry to the feature vector, preferably evaluator-first solvePnP-style head-pose features, then rerun the same replay comparisons before any live/default changes.
 
+## SolvePnP-Style Scalar Pose Geometry Slice
+
+Date: 2026-05-15
+
+A pure append-only `solvepnp_style_feature_vector` helper now extends the existing 23-value head-pose proxy vector to 29 scalar features. The appended slice uses canonical 2D pose landmarks that are commonly used for solvePnP-style head-pose estimation: nose tip, chin, and left/right mouth corners. The implementation remains scalar-only and pure in `tracking.features`; MediaPipe wiring converts landmark indices to `Point2D` values and still does not log frames, raw landmark dumps, or image payloads.
+
+Appended feature slice:
+
+| Index Range | Feature |
+|---|---|
+| `23` | chin X offset from nose, normalized by face width |
+| `24` | chin Y offset from nose, normalized by face height |
+| `25` | nose-to-mouth-center X offset, normalized by mouth width |
+| `26` | mouth-center Y offset from nose, normalized by face height |
+| `27` | mouth width, normalized by face width |
+| `28` | nose-to-chin distance, normalized by face height |
+
+This is not a default-calibration promotion signal by itself. The next evidence step is a fresh manual top-row focus run that captures the 29-feature replay samples, followed by the same scalar separability and replay-model comparisons. Gate: improve `v0` without moving the failure into `v3`/`v4`, and do not promote any live/default behavior until replay and manual validation agree.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:

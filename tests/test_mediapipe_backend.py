@@ -53,6 +53,9 @@ def _landmarks() -> list[FakeLandmark]:
     landmarks = [FakeLandmark(x=0.5, y=0.5) for _ in range(478)]
     landmarks[0] = FakeLandmark(x=0.1, y=0.2)
     landmarks[1] = FakeLandmark(x=0.9, y=0.8)
+    landmarks[MediaPipeTrackerBackend.CHIN_INDEX] = FakeLandmark(x=0.8, y=0.8)
+    landmarks[MediaPipeTrackerBackend.LEFT_MOUTH_CORNER_INDEX] = FakeLandmark(x=0.65, y=0.7)
+    landmarks[MediaPipeTrackerBackend.RIGHT_MOUTH_CORNER_INDEX] = FakeLandmark(x=0.85, y=0.75)
     for index in MediaPipeTrackerBackend.LEFT_IRIS_INDICES:
         landmarks[index] = FakeLandmark(x=0.3, y=0.4)
     for index in MediaPipeTrackerBackend.RIGHT_IRIS_INDICES:
@@ -121,7 +124,7 @@ def test_mocked_landmarks_produce_valid_observation_with_stable_feature_vector()
     assert observation.right_iris is not None
     assert observation.right_iris.x == pytest.approx(70.0)
     assert observation.right_iris.y == pytest.approx(50.0)
-    assert len(observation.feature_vector) == 23
+    assert len(observation.feature_vector) == 29
     assert observation.feature_vector[:14] == pytest.approx(
         (
             0.25,
@@ -150,11 +153,21 @@ def test_mocked_landmarks_produce_valid_observation_with_stable_feature_vector()
             (40**2 + 10**2) ** 0.5 / 100,
         )
     )
-    assert observation.feature_vector[20:] == pytest.approx(
+    assert observation.feature_vector[20:23] == pytest.approx(
         (
             0.25,
             0.5,
             35 / 60,
+        )
+    )
+    assert observation.feature_vector[23:] == pytest.approx(
+        (
+            -10 / 80,
+            0.0,
+            15 / ((20**2 + 5**2) ** 0.5),
+            -7.5 / 60,
+            (20**2 + 5**2) ** 0.5 / 80,
+            10 / 60,
         )
     )
     assert observation.frame_width == 100

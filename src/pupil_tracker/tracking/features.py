@@ -181,8 +181,86 @@ def head_pose_feature_vector(
     )
 
 
+def solvepnp_style_feature_vector(
+    *,
+    face_bounds: Rect,
+    left_iris: Point2D | None,
+    right_iris: Point2D | None,
+    left_eye_bounds: Rect,
+    right_eye_bounds: Rect,
+    nose_tip: Point2D | None,
+    chin: Point2D | None,
+    left_mouth_corner: Point2D | None,
+    right_mouth_corner: Point2D | None,
+    frame_width: int,
+    frame_height: int,
+) -> tuple[float, ...]:
+    """Return head-pose proxies plus canonical pose-landmark geometry.
+
+    These appended scalars are inspired by the 2D landmarks typically used for
+    solvePnP head-pose estimation: nose, chin, and mouth corners. They remain
+    pure scalar geometry features; this helper does not solve camera pose or
+    depend on OpenCV/MediaPipe.
+    """
+
+    head_features = head_pose_feature_vector(
+        face_bounds=face_bounds,
+        left_iris=left_iris,
+        right_iris=right_iris,
+        left_eye_bounds=left_eye_bounds,
+        right_eye_bounds=right_eye_bounds,
+        nose_tip=nose_tip,
+        frame_width=frame_width,
+        frame_height=frame_height,
+    )
+    if nose_tip is None:
+        msg = "nose tip landmark is required"
+        raise FeatureExtractionError(msg)
+    chin_point = _require_point(chin, "chin")
+    left_mouth = _require_point(left_mouth_corner, "left mouth corner")
+    right_mouth = _require_point(right_mouth_corner, "right mouth corner")
+
+    mouth_center = Point2D(
+        x=(left_mouth.x + right_mouth.x) / 2.0,
+        y=(left_mouth.y + right_mouth.y) / 2.0,
+    )
+    mouth_width_px = hypot(
+        right_mouth.x - left_mouth.x,
+        right_mouth.y - left_mouth.y,
+    )
+    if mouth_width_px <= 0.0:
+        msg = "mouth corners must not overlap"
+        raise FeatureExtractionError(msg)
+
+    chin_x_offset = (chin_point.x - nose_tip.x) / face_bounds.width
+    chin_y_offset = (chin_point.y - nose_tip.y) / face_bounds.height
+    nose_to_mouth_x = (nose_tip.x - mouth_center.x) / mouth_width_px
+    mouth_center_y_offset = (mouth_center.y - nose_tip.y) / face_bounds.height
+    mouth_width = mouth_width_px / face_bounds.width
+    nose_to_chin_distance = hypot(
+        chin_point.x - nose_tip.x,
+        chin_point.y - nose_tip.y,
+    ) / face_bounds.height
+    return (
+        *head_features,
+        chin_x_offset,
+        chin_y_offset,
+        nose_to_mouth_x,
+        mouth_center_y_offset,
+        mouth_width,
+        nose_to_chin_distance,
+    )
+
+
 def _rect_center(bounds: Rect) -> Point2D:
     return Point2D(x=bounds.x + bounds.width / 2.0, y=bounds.y + bounds.height / 2.0)
+
+
+def _require_point(point: Point2D | None, label: str) -> Point2D:
+    if point is None:
+        msg = f"{label} landmark is required"
+        raise FeatureExtractionError(msg)
+    return point
 
 
 def _validate_bounds(bounds: Rect, label: str) -> None:

@@ -9,6 +9,7 @@ from pupil_tracker.tracking.features import (
     face_context_feature_vector,
     head_pose_feature_vector,
     iris_feature_vector,
+    solvepnp_style_feature_vector,
 )
 
 
@@ -137,6 +138,62 @@ def test_head_pose_proxy_features_capture_pitch_yaw_roll() -> None:
             17.5 / 90,  # nose offset from eye midpoint / face height, pitch proxy
         )
     )
+
+
+def test_solvepnp_style_feature_vector_appends_canonical_pose_geometry() -> None:
+    head_features = head_pose_feature_vector(
+        face_bounds=Rect(x=20, y=30, width=160, height=90),
+        left_iris=Point2D(x=70, y=70),
+        right_iris=Point2D(x=150, y=75),
+        left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+        right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+        nose_tip=Point2D(x=120, y=90),
+        frame_width=400,
+        frame_height=300,
+    )
+    features = solvepnp_style_feature_vector(
+        face_bounds=Rect(x=20, y=30, width=160, height=90),
+        left_iris=Point2D(x=70, y=70),
+        right_iris=Point2D(x=150, y=75),
+        left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+        right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+        nose_tip=Point2D(x=120, y=90),
+        chin=Point2D(x=130, y=115),
+        left_mouth_corner=Point2D(x=90, y=105),
+        right_mouth_corner=Point2D(x=150, y=110),
+        frame_width=400,
+        frame_height=300,
+    )
+
+    assert len(features) == 29
+    assert features[:23] == pytest.approx(head_features)
+    assert features[23:] == pytest.approx(
+        (
+            10 / 160,  # chin X offset from nose, yaw/turn proxy
+            25 / 90,  # chin Y offset from nose, pitch/down-axis proxy
+            0.0,  # nose-to-mouth horizontal offset normalized by mouth width
+            17.5 / 90,  # mouth center Y offset from nose
+            (60**2 + 5**2) ** 0.5 / 160,  # mouth width relative to face width
+            (10**2 + 25**2) ** 0.5 / 90,  # nose-to-chin distance relative to face height
+        )
+    )
+
+
+def test_solvepnp_style_feature_vector_requires_canonical_pose_landmarks() -> None:
+    with pytest.raises(FeatureExtractionError, match="chin"):
+        solvepnp_style_feature_vector(
+            face_bounds=Rect(x=20, y=30, width=160, height=90),
+            left_iris=Point2D(x=70, y=70),
+            right_iris=Point2D(x=150, y=75),
+            left_eye_bounds=Rect(x=60, y=55, width=30, height=30),
+            right_eye_bounds=Rect(x=135, y=60, width=30, height=30),
+            nose_tip=Point2D(x=120, y=90),
+            chin=None,
+            left_mouth_corner=Point2D(x=90, y=105),
+            right_mouth_corner=Point2D(x=150, y=110),
+            frame_width=400,
+            frame_height=300,
+        )
 
 
 def test_head_pose_feature_vector_requires_nose_tip() -> None:

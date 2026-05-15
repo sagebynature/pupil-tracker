@@ -10,7 +10,7 @@ import mediapipe as mp
 from pupil_tracker.logging_config import get_logger
 from pupil_tracker.models import Point2D, RawObservation, Rect
 from pupil_tracker.tracking.backend import Frame
-from pupil_tracker.tracking.features import FeatureExtractionError, head_pose_feature_vector
+from pupil_tracker.tracking.features import FeatureExtractionError, solvepnp_style_feature_vector
 
 _LOGGER = get_logger("tracking.mediapipe")
 
@@ -23,6 +23,9 @@ class MediaPipeTrackerBackend:
     LEFT_EYE_INDICES: ClassVar[tuple[int, ...]] = (33, 133, 159, 145)
     RIGHT_EYE_INDICES: ClassVar[tuple[int, ...]] = (362, 263, 386, 374)
     NOSE_TIP_INDEX: ClassVar[int] = 1
+    CHIN_INDEX: ClassVar[int] = 152
+    LEFT_MOUTH_CORNER_INDEX: ClassVar[int] = 61
+    RIGHT_MOUTH_CORNER_INDEX: ClassVar[int] = 291
 
     name = "mediapipe"
 
@@ -77,14 +80,36 @@ class MediaPipeTrackerBackend:
             frame.metadata.height,
         )
 
+        chin = self._landmark_point(
+            landmarks,
+            self.CHIN_INDEX,
+            frame.metadata.width,
+            frame.metadata.height,
+        )
+        left_mouth_corner = self._landmark_point(
+            landmarks,
+            self.LEFT_MOUTH_CORNER_INDEX,
+            frame.metadata.width,
+            frame.metadata.height,
+        )
+        right_mouth_corner = self._landmark_point(
+            landmarks,
+            self.RIGHT_MOUTH_CORNER_INDEX,
+            frame.metadata.width,
+            frame.metadata.height,
+        )
+
         try:
-            features = head_pose_feature_vector(
+            features = solvepnp_style_feature_vector(
                 face_bounds=face_bounds,
                 left_iris=left_iris,
                 right_iris=right_iris,
                 left_eye_bounds=left_eye_bounds,
                 right_eye_bounds=right_eye_bounds,
                 nose_tip=nose_tip,
+                chin=chin,
+                left_mouth_corner=left_mouth_corner,
+                right_mouth_corner=right_mouth_corner,
                 frame_width=frame.metadata.width,
                 frame_height=frame.metadata.height,
             )
