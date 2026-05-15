@@ -14,6 +14,7 @@ if str(TOOLS_ROOT) not in sys.path:
 
 from evaluate_calibration_models import (  # noqa: E402
     ModelEvaluationResult,
+    apply_target_weighting,
     evaluate_replay_models,
     filter_calibration_samples_by_window,
     format_model_evaluation_report,
@@ -100,6 +101,42 @@ def _calibration_sample(target_id: str, sample_index: int) -> CalibrationSample:
             feature_vector=(float(sample_index),),
         ),
     )
+
+
+def _calibration_sample_at(target_id: str, x: float, y: float) -> CalibrationSample:
+    return CalibrationSample(
+        target=CalibrationTarget(id=target_id, x=x, y=y),
+        observation=RawObservation(
+            timestamp=1.0,
+            valid=True,
+            confidence=0.9,
+            feature_vector=(x, y),
+        ),
+    )
+
+
+def test_target_weighting_policies_expand_expected_targets() -> None:
+    samples = (
+        _calibration_sample_at("top_left", 0.1, 0.1),
+        _calibration_sample_at("top_center", 0.5, 0.1),
+        _calibration_sample_at("center", 0.5, 0.5),
+        _calibration_sample_at("middle_left", 0.1, 0.5),
+        _calibration_sample_at("bottom_right", 0.9, 0.9),
+    )
+
+    none = apply_target_weighting(samples, policy="none")
+    vertical_edges = apply_target_weighting(samples, policy="vertical_edges")
+    screen_edges = apply_target_weighting(samples, policy="screen_edges")
+    corners = apply_target_weighting(samples, policy="corners")
+
+    assert none == samples
+    assert [sample.target.id for sample in vertical_edges].count("top_center") == 3
+    assert [sample.target.id for sample in vertical_edges].count("center") == 1
+    assert [sample.target.id for sample in screen_edges].count("middle_left") == 3
+    assert [sample.target.id for sample in screen_edges].count("center") == 1
+    assert [sample.target.id for sample in corners].count("top_left") == 3
+    assert [sample.target.id for sample in corners].count("top_center") == 1
+    assert [sample.target.id for sample in corners].count("bottom_right") == 3
 
 
 def test_load_replay_dataset_reads_calibration_and_validation_samples(tmp_path: Path) -> None:
@@ -308,6 +345,60 @@ def test_corrected_candidates_can_reduce_regularized_mapping_error(tmp_path: Pat
         by_name["linear-alpha-1.0-affine-corrected"].metrics.mean_error_px
         < by_name["linear-alpha-1.0"].metrics.mean_error_px
     )
+
+
+def test_evaluate_replay_models_includes_weighted_target_candidates(tmp_path: Path) -> None:
+    log_path = tmp_path / "demo.jsonl"
+    events = [
+        _replay_event(
+            "calibration_replay_sample",
+            target_id="top_left",
+            target_x=0.1,
+            target_y=0.1,
+        ),
+        _replay_event(
+            "calibration_replay_sample",
+            target_id="top_right",
+            target_x=0.9,
+            target_y=0.1,
+        ),
+        _replay_event(
+            "calibration_replay_sample",
+            target_id="bottom_left",
+            target_x=0.1,
+            target_y=0.9,
+        ),
+        _replay_event(
+            "calibration_replay_sample",
+            target_id="bottom_right",
+            target_x=0.9,
+            target_y=0.9,
+        ),
+        _replay_event("calibration_replay_sample", target_id="center", target_x=0.5, target_y=0.5),
+        _replay_event("validation_replay_sample", target_id="v0", target_x=0.25, target_y=0.25),
+        _replay_event("validation_replay_sample", target_id="v1", target_x=0.75, target_y=0.75),
+    ]
+    _write_jsonl(log_path, events)
+    dataset = load_replay_dataset(log_path)
+
+    results = evaluate_replay_models(
+        dataset,
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=4,
+        objective="grid",
+    )
+
+    result_names = {result.model_name for result in results}
+    assert {
+        "linear-alpha-0.1-weight-vertical_edges",
+        "linear-alpha-0.1-weight-screen_edges",
+        "linear-alpha-0.1-weight-corners",
+        "poly2-alpha-1.0-weight-vertical_edges",
+        "poly2-alpha-1.0-weight-screen_edges",
+        "poly2-alpha-1.0-weight-corners",
+    } <= result_names
 
 
 def test_evaluate_replay_models_ranks_models_on_same_samples(tmp_path: Path) -> None:

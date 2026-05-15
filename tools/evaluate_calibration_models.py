@@ -22,6 +22,7 @@ from pupil_tracker.models import CalibrationSample, CalibrationTarget, GazeSampl
 
 EvaluationObjective = Literal["error", "grid"]
 SampleWindow = Literal["all", "early", "middle", "late"]
+TargetWeightingPolicy = Literal["none", "vertical_edges", "screen_edges", "corners"]
 ResidualRow = tuple[float, float, float, float, float, bool | None]
 
 
@@ -49,6 +50,15 @@ class _CoordinateCorrector(Protocol):
     ) -> Any: ...
 
     def predict(self, coordinates: Sequence[tuple[float, float]]) -> Any: ...
+
+
+@dataclass(frozen=True)
+class ReplayModelCandidate:
+    """Evaluator-only model candidate plus optional calibration weighting policy."""
+
+    name: str
+    model: _ReplayCalibrationModel
+    weighting_policy: TargetWeightingPolicy = "none"
 
 
 @dataclass(frozen=True)
@@ -287,6 +297,33 @@ def _sample_window_bounds(sample_count: int, *, window: SampleWindow) -> tuple[i
     return (0, sample_count)
 
 
+def apply_target_weighting(
+    samples: Sequence[CalibrationSample],
+    *,
+    policy: TargetWeightingPolicy,
+) -> tuple[CalibrationSample, ...]:
+    """Expand calibration samples according to an evaluator-only target weighting policy."""
+
+    if policy == "none":
+        return tuple(samples)
+    weighted: list[CalibrationSample] = []
+    for sample in samples:
+        weighted.extend([sample] * _target_weight(sample.target, policy=policy))
+    return tuple(weighted)
+
+
+def _target_weight(target: CalibrationTarget, *, policy: TargetWeightingPolicy) -> int:
+    x_is_edge = target.x <= 0.25 or target.x >= 0.75
+    y_is_edge = target.y <= 0.25 or target.y >= 0.75
+    if policy == "vertical_edges" and y_is_edge:
+        return 3
+    if policy == "screen_edges" and (x_is_edge or y_is_edge):
+        return 3
+    if policy == "corners" and x_is_edge and y_is_edge:
+        return 3
+    return 1
+
+
 def summarize_calibration_target_residuals(
     model: _ReplayCalibrationModel,
     samples: Sequence[CalibrationSample],
@@ -432,8 +469,13 @@ def evaluate_replay_models(
         dataset.calibration_samples,
         window=calibration_sample_window,
     )
-    for model_name, model in _candidate_models():
-        model.fit(calibration_samples, screen_width, screen_height)
+    for candidate in _candidate_models():
+        model = candidate.model
+        weighted_calibration_samples = apply_target_weighting(
+            calibration_samples,
+            policy=candidate.weighting_policy,
+        )
+        model.fit(weighted_calibration_samples, screen_width, screen_height)
         validation_samples = tuple(
             ValidationSample(
                 target=replay_observation.target,
@@ -467,7 +509,7 @@ def evaluate_replay_models(
         )
         results.append(
             ModelEvaluationResult(
-                model_name=model_name,
+                model_name=candidate.name,
                 metrics=metrics,
                 calibration_target_residuals=calibration_residuals,
                 validation_target_residuals=validation_residuals,
@@ -583,37 +625,65 @@ def _calibration_prediction_residuals(
     return tuple(residuals)
 
 
-def _candidate_models() -> tuple[tuple[str, _ReplayCalibrationModel], ...]:
+def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
     linear_1 = LinearRidgeCalibrationModel(alpha=1.0)
     poly_1 = PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
-    return (
-        ("linear-alpha-0.1", LinearRidgeCalibrationModel(alpha=0.1)),
-        ("linear-alpha-1.0", linear_1),
-        (
+    base_candidates = (
+        ReplayModelCandidate("linear-alpha-0.1", LinearRidgeCalibrationModel(alpha=0.1)),
+        ReplayModelCandidate("linear-alpha-1.0", linear_1),
+        ReplayModelCandidate(
             "linear-alpha-1.0-bias-corrected",
             BiasCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
         ),
-        (
+        ReplayModelCandidate(
             "linear-alpha-1.0-affine-corrected",
             AffineCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
         ),
-        ("linear-alpha-10.0", LinearRidgeCalibrationModel(alpha=10.0)),
-        ("poly2-alpha-0.1", PolynomialRidgeCalibrationModel(degree=2, alpha=0.1)),
-        ("poly2-alpha-1.0", poly_1),
-        (
+        ReplayModelCandidate("linear-alpha-10.0", LinearRidgeCalibrationModel(alpha=10.0)),
+        ReplayModelCandidate(
+            "poly2-alpha-0.1",
+            PolynomialRidgeCalibrationModel(degree=2, alpha=0.1),
+        ),
+        ReplayModelCandidate("poly2-alpha-1.0", poly_1),
+        ReplayModelCandidate(
             "poly2-alpha-1.0-bias-corrected",
             BiasCorrectedCalibrationModel(
                 PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
             ),
         ),
-        (
+        ReplayModelCandidate(
             "poly2-alpha-1.0-affine-corrected",
             AffineCorrectedCalibrationModel(
                 PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
             ),
         ),
-        ("poly2-alpha-10.0", PolynomialRidgeCalibrationModel(degree=2, alpha=10.0)),
+        ReplayModelCandidate(
+            "poly2-alpha-10.0",
+            PolynomialRidgeCalibrationModel(degree=2, alpha=10.0),
+        ),
     )
+    weighting_policies: tuple[TargetWeightingPolicy, ...] = (
+        "vertical_edges",
+        "screen_edges",
+        "corners",
+    )
+    weighted_candidates = tuple(
+        candidate
+        for policy in weighting_policies
+        for candidate in (
+            ReplayModelCandidate(
+                f"linear-alpha-0.1-weight-{policy}",
+                LinearRidgeCalibrationModel(alpha=0.1),
+                weighting_policy=policy,
+            ),
+            ReplayModelCandidate(
+                f"poly2-alpha-1.0-weight-{policy}",
+                PolynomialRidgeCalibrationModel(degree=2, alpha=1.0),
+                weighting_policy=policy,
+            ),
+        )
+    )
+    return base_candidates + weighted_candidates
 
 
 def _parse_event(line: str, *, line_number: int) -> Mapping[str, object]:
