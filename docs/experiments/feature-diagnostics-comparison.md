@@ -243,6 +243,49 @@ Interpretation:
 4. The latest replay still shows some model-form sensitivity (`linear-alpha-0.1` with early/all windows reaches `40.1%`-`43.3%` offline), but every candidate remains `retry`; do not promote a model solely from this noisy run.
 5. Next implementation should compare target-specific residuals and calibration/validation target geometry before another default live policy change.
 
+## Target Residual Replay Analysis
+
+Date: 2026-05-15
+
+The replay evaluator now supports `--include-target-residuals`, which appends per-target calibration and validation residual tables for the top-ranked model. The latest run was isolated to lines `48430`-`53453` before analysis.
+
+Top grid model per calibration sample window on the latest run:
+
+| Calibration Window | Top Grid Model | Mean Error | Mean Y | Signed Y | Grid Accuracy | Recommendation |
+|---|---|---:|---:|---:|---:|---|
+| `all` | `linear-alpha-0.1` | 253.15 px | 169.91 px | +147.64 px | 40.1% | retry |
+| `early` | `linear-alpha-0.1` | 237.80 px | 164.46 px | +132.90 px | 43.3% | retry |
+| `middle` | `poly2-alpha-1.0-affine-corrected` | 256.27 px | 179.34 px | +103.23 px | 29.8% | retry |
+| `late` | `poly2-alpha-1.0` | 237.83 px | 159.95 px | +66.86 px | 28.5% | retry |
+
+The live late-window path uses the default polynomial model, which matches the `poly2-alpha-1.0` replay candidate. Its worst calibration residuals were strongly vertical and concentrated at screen edges:
+
+| Target | Target X | Target Y | Samples | Mean Error | Mean X | Mean Y | Signed X | Signed Y |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `r0c1` | 0.50 | 0.10 | 25 | 199.88 px | 25.18 px | 197.86 px | +25.18 px | +197.86 px |
+| `r0c2` | 0.90 | 0.10 | 25 | 131.05 px | 23.39 px | 128.29 px | +22.64 px | +128.29 px |
+| `r4c1` | 0.50 | 0.90 | 25 | 124.78 px | 22.35 px | 120.70 px | +21.77 px | -117.50 px |
+| `r4c2` | 0.90 | 0.90 | 25 | 116.34 px | 58.89 px | 94.38 px | -58.89 px | -94.38 px |
+| `r1c0` | 0.10 | 0.30 | 25 | 97.22 px | 77.86 px | 56.38 px | -77.86 px | +56.38 px |
+
+Worst validation residuals for the same live-equivalent `late`/`poly2-alpha-1.0` path:
+
+| Target | Target X | Target Y | Samples | Mean Error | Mean X | Mean Y | Signed X | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `v0` | 0.25 | 0.25 | 64 | 383.70 px | 72.95 px | 368.87 px | +15.19 px | +368.87 px | 0.0% |
+| `v4` | 0.75 | 0.75 | 64 | 301.57 px | 172.43 px | 184.47 px | -64.21 px | -172.33 px | 12.5% |
+| `v1` | 0.75 | 0.25 | 63 | 261.44 px | 207.81 px | 118.26 px | -12.09 px | +91.43 px | 50.8% |
+| `v2` | 0.50 | 0.50 | 64 | 144.52 px | 80.92 px | 81.70 px | +80.01 px | +70.23 px | 71.9% |
+| `v3` | 0.25 | 0.75 | 64 | 98.28 px | 79.62 px | 45.79 px | +32.78 px | -23.54 px | 7.8% |
+
+Interpretation:
+
+1. The regression is dominated by vertical error, especially top-left validation target `v0` (`+368.87 px` signed Y, `0.0%` grid accuracy) and bottom-right `v4` (`-172.33 px` signed Y, `12.5%` grid accuracy).
+2. Calibration residuals show the same vertical compression pattern: top calibration targets are predicted too low, while bottom targets are predicted too high.
+3. Edge and corner targets are worse than the center. This points to geometry/coverage and mapping compression, not simply noisy late samples.
+4. The best offline grid model for this run (`early` + `linear-alpha-0.1`, `43.3%`) still has retry-level error and severe top-row vertical bias, so it should not be promoted as-is.
+5. Next implementation should test target weighting or geometry changes that penalize top/bottom residuals, while keeping the default live sample window as `all`.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -253,7 +296,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Keep the features and evaluator corrections for now; do not change the default sample window or live model until target-specific residual analysis explains the run-to-run instability.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Keep the features and evaluator corrections for now; do not change the default sample window or live model until target weighting or geometry changes beat the current baseline in replay and then live validation.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
