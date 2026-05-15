@@ -60,6 +60,7 @@ def test_ci_workflow_runs_checks_on_ubuntu_without_macos_gate() -> None:
     assert "name: CI" in workflow
     assert "pull_request:" in workflow
     assert "runs-on: ubuntu-latest" in workflow
+    assert "libegl1" in workflow
     assert "run: make check" in workflow
     assert "macos-latest" not in workflow
 
@@ -73,6 +74,7 @@ def test_release_workflow_semantic_releases_and_publishes_from_ubuntu() -> None:
     assert "branches: [main]" in workflow
     assert "python-semantic-release/python-semantic-release@" in workflow
     assert "runs-on: ubuntu-latest" in workflow
+    assert "libegl1" in workflow
     assert "uses: pypa/gh-action-pypi-publish@release/v1" in workflow
     assert "macos-latest" not in workflow
 
