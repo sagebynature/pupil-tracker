@@ -52,6 +52,16 @@ def test_project_metadata_marks_core_library_cross_platform() -> None:
     assert "pyobjc-framework-quartz>=10.0; sys_platform == 'darwin'" in project["dependencies"]
 
 
+def test_publish_workflow_builds_and_publishes_from_ubuntu() -> None:
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "publish.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "  macos-check:\n    name: macOS checks\n    runs-on: macos-latest" in workflow
+    assert "  build:\n    name: Build PyPI distributions\n    runs-on: ubuntu-latest" in workflow
+    assert "  publish:\n    name: Publish to PyPI\n    runs-on: ubuntu-latest" in workflow
+
+
 def test_release_tag_must_match_project_version(tmp_path: Path) -> None:
     pyproject = _write_pyproject(tmp_path, "1.2.3")
 
