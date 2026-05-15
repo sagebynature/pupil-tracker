@@ -363,6 +363,43 @@ Interpretation:
 
 Decision: keep vertical-bias correction candidates in the replay evaluator for comparison, but do not expose live config and do not change live defaults.
 
+## Replay Per-Band Correction Analysis
+
+Date: 2026-05-15
+
+The replay evaluator now includes evaluator-only per-band correction candidates. The correction fits the base model, predicts calibration samples, buckets calibration residuals by predicted normalized Y band, learns a mean Y residual per band, and applies the matching band's Y residual at prediction time while leaving X unchanged.
+
+Latest-run results, isolated to lines `48430`-`53453`:
+
+| Calibration Window | Best Overall Model | Overall Grid | Best Uncorrected/Unweighted | Uncorrected Grid | Best Weighted | Weighted Grid | Best Vertical-Bias | Vertical Grid | Best Per-Band | Per-Band Grid |
+|---|---|---:|---|---:|---|---:|---|---:|---|---:|
+| `all` | `poly2-alpha-10.0-vertical-bias-corrected` | 43.3% | `linear-alpha-0.1` | 40.1% | `linear-alpha-0.1-weight-vertical_edges` | 34.8% | `poly2-alpha-10.0-vertical-bias-corrected` | 43.3% | `linear-alpha-0.1-per-band-corrected` | 40.1% |
+| `early` | `poly2-alpha-1.0-weight-screen_edges` | 44.5% | `linear-alpha-0.1` | 43.3% | `poly2-alpha-1.0-weight-screen_edges` | 44.5% | `linear-alpha-0.1-vertical-bias-corrected` | 38.9% | `linear-alpha-0.1-per-band-corrected` | 43.3% |
+| `middle` | `poly2-alpha-10.0-vertical-bias-corrected` | 42.6% | `poly2-alpha-1.0-affine-corrected` | 29.8% | `poly2-alpha-1.0-weight-corners` | 31.7% | `poly2-alpha-10.0-vertical-bias-corrected` | 42.6% | `poly2-alpha-1.0-per-band-corrected` | 29.8% |
+| `late` | `poly2-alpha-10.0-vertical-bias-corrected` | 37.9% | `poly2-alpha-1.0` | 28.5% | `poly2-alpha-1.0-weight-vertical_edges` | 30.1% | `poly2-alpha-10.0-vertical-bias-corrected` | 37.9% | `poly2-alpha-1.0-per-band-corrected` | 28.5% |
+
+Best per-band candidate was `early` + `linear-alpha-0.1-per-band-corrected` at `43.3%` grid accuracy. That only matches the uncorrected early candidate, trails the best weighted replay result (`44.5%`), and trails the best global vertical-bias result for the default `all` window (`43.3%`) while carrying worse top-row residuals.
+
+Validation residuals for `early` + `linear-alpha-0.1-per-band-corrected`:
+
+| Target | Mean Error | Signed X | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|---:|
+| `v0` | 423.70 px | +127.75 px | +399.18 px | 0.0% |
+| `v1` | 285.63 px | -78.18 px | +222.85 px | 0.0% |
+| `v3` | 182.68 px | +166.41 px | +44.34 px | 85.9% |
+| `v4` | 173.10 px | -57.75 px | +16.43 px | 54.7% |
+| `v2` | 154.77 px | +62.97 px | +106.83 px | 75.0% |
+
+Interpretation:
+
+1. Three-band residual correction does not fix top-row collapse. `v0` and `v1` remain `0.0%` grid accuracy.
+2. Per-band correction mostly preserves the same grid result as its base early linear model while worsening signed Y bias (`+157.72 px` vs `+132.90 px`).
+3. The remaining error is not a coarse top/middle/bottom Y-only correction problem; X residuals at corners are also large.
+4. Do not promote per-band correction to live behavior.
+5. Next high-leverage evaluator slice should test calibration geometry: denser top-row / edge targets or changed target placement, because correction-only wrappers are no longer removing the corner failures.
+
+Decision: keep per-band candidates in the replay evaluator for comparison, but do not expose live config and do not change live defaults.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -373,7 +410,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model until geometry/per-band changes beat the current baseline in replay and then live validation.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model until calibration geometry changes beat the current baseline in replay and then live validation.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
