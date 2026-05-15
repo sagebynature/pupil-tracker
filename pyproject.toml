@@ -1,6 +1,6 @@
 [project]
 name = "pupil-tracker"
-version = "0.1.0"
+version = "1.0.0"
 description = "Cross-platform pupil and gaze tracking library with a macOS-specific PySide6 desktop demo."
 readme = "README.md"
 requires-python = ">=3.11"
