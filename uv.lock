@@ -787,7 +787,7 @@ dependencies = [
     { name = "mediapipe" },
     { name = "numpy" },
     { name = "opencv-python" },
-    { name = "pyobjc-framework-quartz" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
     { name = "pyside6" },
     { name = "scikit-learn" },
 ]
@@ -805,7 +805,7 @@ requires-dist = [
     { name = "mediapipe", specifier = ">=0.10" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "opencv-python", specifier = ">=4.9" },
-    { name = "pyobjc-framework-quartz", specifier = ">=10.0" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'", specifier = ">=10.0" },
     { name = "pyside6", specifier = ">=6.6" },
     { name = "scikit-learn", specifier = ">=1.4" },
 ]
