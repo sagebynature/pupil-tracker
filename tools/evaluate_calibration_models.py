@@ -522,6 +522,93 @@ class AsymmetricRegionCorrectedCalibrationModel:
         )
 
 
+class TopLeftLocalCorrectedCalibrationModel:
+    """Apply a local residual correction for top-left predictions only."""
+
+    def __init__(
+        self,
+        base_model: _ReplayCalibrationModel,
+        *,
+        center: tuple[float, float] = (0.25, 0.25),
+        fit_radius: float = 0.12,
+        apply_radius: float = 0.35,
+    ) -> None:
+        if fit_radius <= 0.0:
+            msg = "fit_radius must be positive"
+            raise ValueError(msg)
+        if apply_radius <= 0.0:
+            msg = "apply_radius must be positive"
+            raise ValueError(msg)
+        self._base_model = base_model
+        self._center = center
+        self._fit_radius = fit_radius
+        self._apply_radius = apply_radius
+        self._bias = (0.0, 0.0)
+        self._fitted = False
+
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> Any:
+        result = self._base_model.fit(samples, screen_width, screen_height)
+        local_residuals: list[tuple[float, float]] = []
+        for sample in samples:
+            if not sample.observation.valid:
+                continue
+            if _normalized_distance(
+                sample.target.x,
+                sample.target.y,
+                self._center,
+            ) > self._fit_radius:
+                continue
+            prediction = self._base_model.predict(
+                sample.observation,
+                screen_width,
+                screen_height,
+            )
+            if not prediction.valid:
+                continue
+            local_residuals.append(
+                (
+                    sample.target.x * screen_width - prediction.x,
+                    sample.target.y * screen_height - prediction.y,
+                )
+            )
+        if local_residuals:
+            self._bias = _mean_pair(local_residuals)
+        else:
+            self._bias = (0.0, 0.0)
+        self._fitted = True
+        return result
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample:
+        if not self._fitted:
+            msg = "top-left-local-corrected model is not fitted"
+            raise RuntimeError(msg)
+        sample = self._base_model.predict(observation, screen_width, screen_height)
+        if not sample.valid:
+            return sample
+        predicted_x = sample.x / screen_width
+        predicted_y = sample.y / screen_height
+        if _normalized_distance(predicted_x, predicted_y, self._center) > self._apply_radius:
+            return sample
+        return GazeSample(
+            timestamp=sample.timestamp,
+            x=sample.x + self._bias[0],
+            y=sample.y + self._bias[1],
+            confidence=sample.confidence,
+            valid=True,
+            region_id=sample.region_id,
+        )
+
+
 class AffineCorrectedCalibrationModel:
     """Apply a 2D affine correction learned from calibration predictions."""
 
@@ -840,6 +927,14 @@ def _asymmetric_region_id(normalized_x: float, normalized_y: float) -> str:
     return f"{vertical}_{horizontal}"
 
 
+def _normalized_distance(
+    x: float,
+    y: float,
+    center: tuple[float, float],
+) -> float:
+    return hypot(x - center[0], y - center[1])
+
+
 def _mean_pair(values: Sequence[tuple[float, float]]) -> tuple[float, float]:
     return (
         sum(value[0] for value in values) / len(values),
@@ -1068,6 +1163,10 @@ def _candidate_models(feature_count: int) -> tuple[ReplayModelCandidate, ...]:
             "linear-alpha-1.0-affine-corrected",
             AffineCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
         ),
+        ReplayModelCandidate(
+            "linear-alpha-1.0-top-left-local-corrected",
+            TopLeftLocalCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
+        ),
         ReplayModelCandidate("linear-alpha-10.0", LinearRidgeCalibrationModel(alpha=10.0)),
         ReplayModelCandidate(
             "poly2-alpha-0.1",
@@ -1101,6 +1200,12 @@ def _candidate_models(feature_count: int) -> tuple[ReplayModelCandidate, ...]:
         ReplayModelCandidate(
             "poly2-alpha-1.0-affine-corrected",
             AffineCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
+            ),
+        ),
+        ReplayModelCandidate(
+            "poly2-alpha-1.0-top-left-local-corrected",
+            TopLeftLocalCorrectedCalibrationModel(
                 PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
             ),
         ),

@@ -19,6 +19,7 @@ from evaluate_calibration_models import (  # noqa: E402
     ModelEvaluationResult,
     PerBandCorrectedCalibrationModel,
     PoseNormalizedCalibrationModel,
+    TopLeftLocalCorrectedCalibrationModel,
     VerticalBiasCorrectedCalibrationModel,
     apply_target_weighting,
     evaluate_replay_models,
@@ -380,6 +381,70 @@ def test_asymmetric_region_correction_applies_quadrant_residuals() -> None:
     assert corrected_bottom_right.x == 95.0
     assert corrected_bottom_right.y == 95.0
 
+
+def test_top_left_local_correction_applies_only_to_top_left_predictions() -> None:
+    model = TopLeftLocalCorrectedCalibrationModel(
+        FeatureCoordinateModel(),
+        center=(0.25, 0.25),
+        fit_radius=0.12,
+        apply_radius=0.35,
+    )
+    calibration_samples = (
+        CalibrationSample(
+            target=CalibrationTarget(id="tl", x=0.25, y=0.25),
+            observation=RawObservation(
+                timestamp=1.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(25.0, 45.0),
+            ),
+        ),
+        CalibrationSample(
+            target=CalibrationTarget(id="tr", x=0.75, y=0.25),
+            observation=RawObservation(
+                timestamp=2.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(75.0, 45.0),
+            ),
+        ),
+        CalibrationSample(
+            target=CalibrationTarget(id="bl", x=0.25, y=0.75),
+            observation=RawObservation(
+                timestamp=3.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(25.0, 75.0),
+            ),
+        ),
+    )
+
+    model.fit(calibration_samples, screen_width=100.0, screen_height=100.0)
+    corrected_top_left = model.predict(
+        RawObservation(
+            timestamp=4.0,
+            valid=True,
+            confidence=0.9,
+            feature_vector=(30.0, 45.0),
+        ),
+        screen_width=100.0,
+        screen_height=100.0,
+    )
+    unchanged_bottom_left = model.predict(
+        RawObservation(
+            timestamp=5.0,
+            valid=True,
+            confidence=0.9,
+            feature_vector=(30.0, 75.0),
+        ),
+        screen_width=100.0,
+        screen_height=100.0,
+    )
+
+    assert corrected_top_left.x == pytest.approx(30.0)
+    assert corrected_top_left.y == pytest.approx(25.0)
+    assert unchanged_bottom_left.x == pytest.approx(30.0)
+    assert unchanged_bottom_left.y == pytest.approx(75.0)
 
 def test_target_weighting_policies_expand_expected_targets() -> None:
     samples = (
@@ -889,6 +954,38 @@ def test_evaluate_replay_models_includes_asymmetric_correction_candidates(
         "poly2-alpha-10.0-asymmetric-corrected",
     } <= result_names
 
+
+def test_evaluate_replay_models_includes_top_left_local_correction_candidates(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "demo.jsonl"
+    events = [
+        _replay_event("calibration_replay_sample", target_id="tl", target_x=0.25, target_y=0.25),
+        _replay_event("calibration_replay_sample", target_id="tr", target_x=0.75, target_y=0.25),
+        _replay_event("calibration_replay_sample", target_id="bl", target_x=0.25, target_y=0.75),
+        _replay_event("calibration_replay_sample", target_id="br", target_x=0.75, target_y=0.75),
+        _replay_event("calibration_replay_sample", target_id="center", target_x=0.5, target_y=0.5),
+        _replay_event("validation_replay_sample", target_id="v0", target_x=0.25, target_y=0.25),
+        _replay_event("validation_replay_sample", target_id="v3", target_x=0.25, target_y=0.75),
+        _replay_event("validation_replay_sample", target_id="v4", target_x=0.75, target_y=0.75),
+    ]
+    _write_jsonl(log_path, events)
+    dataset = load_replay_dataset(log_path)
+
+    results = evaluate_replay_models(
+        dataset,
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=4,
+        objective="grid",
+    )
+
+    result_names = {result.model_name for result in results}
+    assert {
+        "linear-alpha-1.0-top-left-local-corrected",
+        "poly2-alpha-1.0-top-left-local-corrected",
+    } <= result_names
 
 def test_evaluate_replay_models_ranks_models_on_same_samples(tmp_path: Path) -> None:
     log_path = tmp_path / "demo.jsonl"

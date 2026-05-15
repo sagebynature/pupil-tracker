@@ -976,6 +976,39 @@ Interpretation: the top-left held-out failure is not because scalar features are
 
 Decision: keep top-row focus opt-in. Do not add more calibration geometry next. The next implementation slice should be evaluator-only: either test local/top-left-aware model candidates that can use the separable scalar signal without moving `v3`/`v4`, or add stronger head-pose features such as solvePnP-style scalar pose before live promotion.
 
+## Top-Left Local Correction Replay Candidate
+
+Date: 2026-05-15
+
+A first evaluator-only top-left-aware candidate was added: `TopLeftLocalCorrectedCalibrationModel`. It fits the base replay model, computes the mean residual for calibration targets inside the top-left local cluster, and applies that correction only to predictions near `(0.25, 0.25)`. This is not wired to the live app.
+
+Command:
+
+```bash
+uv run python tools/evaluate_calibration_models.py /tmp/pupil-tracker-top-row-focus-115925-126151.jsonl \
+  --screen-width 5120 \
+  --screen-height 1440 \
+  --grid-columns 4 \
+  --grid-rows 3 \
+  --objective grid \
+  --calibration-sample-window all \
+  --include-target-residuals
+```
+
+Replay comparison on the isolated top-row focus run:
+
+| Candidate | Mean Error | Signed Y | Grid Accuracy | `v0` Grid | `v0` Predicted Cells |
+|---|---:|---:|---:|---:|---|
+| `linear-alpha-1.0` | `489.19 px` | `+100.60 px` | `49.1%` | `0.0%` | `r1c1=39`, `r2c1=15`, `r1c0=9`, `r2c2=1` |
+| `linear-alpha-1.0-top-left-local-corrected` | `485.17 px` | `+89.78 px` | `48.4%` | `0.0%` | `r1c0=30`, `r1c1=16`, `r2c1=15`, `r0c0=2` |
+| `poly2-alpha-1.0` | `550.28 px` | `+190.52 px` | `43.1%` | `0.0%` | `r1c1=34`, `r2c1=19`, `r1c0=10`, `r2c2=1` |
+| `poly2-alpha-1.0-top-left-local-corrected` | `550.05 px` | `+186.67 px` | `43.1%` | `0.0%` | `r1c0=34`, `r2c1=19`, `r1c1=10`, `r2c2=1` |
+| `linear-alpha-1.0-vertical-bias-corrected` | `528.90 px` | `+175.43 px` | `52.2%` | `0.0%` | `r1c1=36`, `r2c1=18`, `r1c0=9`, `r2c2=1` |
+
+The local correction slightly reduced mean error and signed Y bias for the linear base model and did not move `v3`/`v4`, but it still left `v0` at `0.0%` and reduced aggregate grid accuracy from `49.1%` to `48.4%`. It is useful evidence, not a promotion candidate.
+
+Decision: stop adding residual wrappers for this failure. The next slice should add stronger scalar geometry to the feature vector, preferably evaluator-first solvePnP-style head-pose features, then rerun the same replay comparisons before any live/default changes.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
