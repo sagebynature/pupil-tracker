@@ -119,6 +119,18 @@ Use this path only when investigating the persistent top-left `v0` collapse afte
 - [ ] Run validation immediately after the top-left focus calibration.
 - [ ] Compare `v0` grid accuracy, predicted-cell distribution, `v3`/`v4` regressions, mean X/Y error, and signed Y bias against the latest edge-dense runs before changing defaults.
 
+## Experimental Posture Stability Gate
+
+Use this path only after geometry experiments move failures between targets instead of improving the full grid. It is not the default.
+
+- [ ] Launch with `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.08 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
+- [ ] Start logging before calibration so replay samples and validation metrics are captured.
+- [ ] Use the same calibration geometry as the comparison run; change only the posture gate variable.
+- [ ] Watch accepted/rejected counts during capture; high rejection counts mean head pose is moving relative to the first accepted sample for that target.
+- [ ] Confirm calibration still completes without excessive target retries.
+- [ ] Run validation immediately after calibration.
+- [ ] Compare 4x3 grid accuracy, per-target signed Y shifts, and target regressions against the same geometry without the gate before changing defaults.
+
 ## Validation
 
 - [ ] Click Start Validation after calibration completes.

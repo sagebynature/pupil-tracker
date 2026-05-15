@@ -48,6 +48,7 @@ def test_demo_config_defaults_keep_camera_preview_available(
     monkeypatch.delenv("PUPIL_TRACKER_VALIDATION_GRID_COLUMNS", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_VALIDATION_GRID_ROWS", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", raising=False)
+    monkeypatch.delenv("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA", raising=False)
 
     config = DemoConfig.from_environment()
 
@@ -59,6 +60,30 @@ def test_demo_config_defaults_keep_camera_preview_available(
     assert config.validation_grid_rows == 3
     assert config.calibration_sample_window == "all"
     assert config.gaze_focus_enabled is False
+    assert config.posture_stability_max_delta is None
+
+
+def test_demo_config_parses_posture_stability_max_delta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA", "0.08")
+
+    config = DemoConfig.from_environment()
+
+    assert config.posture_stability_max_delta == pytest.approx(0.08)
+
+
+def test_demo_config_rejects_invalid_posture_stability_max_delta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA", "0")
+
+    with pytest.raises(ValueError, match="PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA"):
+        DemoConfig.from_environment()
 
 
 def test_demo_config_parses_calibration_sample_window(
@@ -213,6 +238,7 @@ def test_create_main_window_applies_config_to_camera_and_timer(
         validation_grid_rows=4,
         calibration_sample_window="late",
         gaze_focus_enabled=True,
+        posture_stability_max_delta=0.08,
     )
 
     window = demo_app.create_main_window(config=config)
@@ -223,6 +249,12 @@ def test_create_main_window_applies_config_to_camera_and_timer(
     assert window.validation_session.grid_columns == 5
     assert window.validation_session.grid_rows == 4
     assert window.calibration_session.calibration_sample_window == "late"
+    assert window.calibration_session.quality_filter is not None
+    assert window.calibration_session.quality_filter.stability_config is not None
+    assert (
+        window.calibration_session.quality_filter.stability_config.max_delta
+        == pytest.approx(0.08)
+    )
     assert window.gaze_focus_enabled is True
     window.stop_camera()
     qt_app.processEvents()

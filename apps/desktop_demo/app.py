@@ -37,6 +37,7 @@ def create_main_window(*, config: DemoConfig | None = None) -> MainWindow:
         validation_grid_rows=resolved_config.validation_grid_rows,
         calibration_sample_window=resolved_config.calibration_sample_window,
         gaze_focus_enabled=resolved_config.gaze_focus_enabled,
+        posture_stability_max_delta=resolved_config.posture_stability_max_delta,
     )
 
 

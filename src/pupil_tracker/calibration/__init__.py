@@ -19,6 +19,7 @@ from pupil_tracker.calibration.patterns import (
 from pupil_tracker.calibration.quality import (
     CalibrationQualityFilter,
     CalibrationSampleDecision,
+    FeatureStabilityConfig,
     TargetQualitySummary,
     summarize_target_quality,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "CalibrationSampleCollector",
     "CalibrationSampleDecision",
     "FeatureDiagnosticsSummary",
+    "FeatureStabilityConfig",
     "LinearRidgeCalibrationModel",
     "PolynomialRidgeCalibrationModel",
     "TargetFeatureSummary",

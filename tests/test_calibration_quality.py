@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from pupil_tracker.calibration import CalibrationQualityFilter, summarize_target_quality
+from pupil_tracker.calibration import (
+    CalibrationQualityFilter,
+    FeatureStabilityConfig,
+    summarize_target_quality,
+)
 from pupil_tracker.models import RawObservation
 
 
@@ -72,6 +76,51 @@ def test_rejects_feature_count_mismatch() -> None:
 
     assert decision.accepted is False
     assert decision.reason == "feature vector length 3 != expected 4"
+
+
+def test_accepts_observation_within_feature_stability_delta() -> None:
+    quality_filter = CalibrationQualityFilter(
+        min_confidence=0.6,
+        stability_config=FeatureStabilityConfig(
+            feature_indices=(1, 2),
+            max_delta=0.05,
+        ),
+    )
+
+    decision = quality_filter.decide(
+        observation(feature_vector=(0.1, 0.23, 0.33)),
+        reference_features=(0.1, 0.2, 0.3),
+    )
+
+    assert decision.accepted is True
+    assert decision.reason == "accepted"
+
+
+def test_rejects_observation_with_unstable_feature_delta() -> None:
+    quality_filter = CalibrationQualityFilter(
+        min_confidence=0.6,
+        stability_config=FeatureStabilityConfig(
+            feature_indices=(1, 2),
+            max_delta=0.05,
+        ),
+    )
+
+    decision = quality_filter.decide(
+        observation(feature_vector=(0.1, 0.28, 0.3)),
+        reference_features=(0.1, 0.2, 0.3),
+    )
+
+    assert decision.accepted is False
+    assert decision.reason == "feature 1 drift 0.080 exceeds 0.050"
+
+
+def test_feature_stability_config_rejects_invalid_inputs() -> None:
+    with pytest.raises(ValueError, match="feature_indices must not be empty"):
+        FeatureStabilityConfig(feature_indices=(), max_delta=0.05)
+    with pytest.raises(ValueError, match="feature indices must be non-negative"):
+        FeatureStabilityConfig(feature_indices=(-1,), max_delta=0.05)
+    with pytest.raises(ValueError, match="max_delta must be positive"):
+        FeatureStabilityConfig(feature_indices=(1,), max_delta=0.0)
 
 
 @pytest.mark.parametrize("min_confidence", [-0.1, 1.1])

@@ -39,6 +39,8 @@ from desktop_demo.ui.overlay import GazeOverlay
 from desktop_demo.validation_session import ValidationSession, ValidationSessionState
 from pupil_tracker import get_logger
 from pupil_tracker.calibration import (
+    CalibrationQualityFilter,
+    FeatureStabilityConfig,
     LinearRidgeCalibrationModel,
     PolynomialRidgeCalibrationModel,
     TimedCalibrationConfig,
@@ -71,6 +73,7 @@ from pupil_tracker.telemetry import (
 from pupil_tracker.tracking import Frame, MediaPipeTrackerBackend
 
 _LOGGER = get_logger("desktop_demo.ui")
+_HEAD_POSE_FEATURE_INDICES = (20, 21, 22)
 
 
 class CameraSource(Protocol):
@@ -185,6 +188,7 @@ class MainWindow(QMainWindow):
         validation_grid_rows: int = 3,
         calibration_sample_window: CalibrationSampleWindow = "all",
         gaze_focus_enabled: bool = False,
+        posture_stability_max_delta: float | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -212,13 +216,14 @@ class MainWindow(QMainWindow):
         self.telemetry_path = (
             telemetry_path if telemetry_path is not None else Path("metrics/demo.jsonl")
         )
+        self.telemetry_logger: JsonlLogger | None = None
         if validation_grid_columns <= 0 or validation_grid_rows <= 0:
             msg = "validation grid dimensions must be positive"
             raise ValueError(msg)
         self.validation_grid_columns = validation_grid_columns
         self.validation_grid_rows = validation_grid_rows
         self.calibration_sample_window: CalibrationSampleWindow = calibration_sample_window
-        self.telemetry_logger: JsonlLogger | None = None
+        self.posture_stability_max_delta = posture_stability_max_delta
         self._last_preview_qimage: QImage | None = None
 
         self.preview_label = QLabel("Camera preview stopped")
@@ -337,13 +342,32 @@ class MainWindow(QMainWindow):
         """Create the default calibration session for the current screen."""
 
         screen_width, screen_height = self._screen_size()
+        timing_config = TimedCalibrationConfig()
         return CalibrationSession(
             flow=self.calibration_view.flow,
             model=PolynomialRidgeCalibrationModel(),
             screen_width=screen_width,
             screen_height=screen_height,
-            timing_config=TimedCalibrationConfig(),
+            timing_config=timing_config,
+            quality_filter=self._create_calibration_quality_filter(timing_config),
             calibration_sample_window=self.calibration_sample_window,
+        )
+
+    def _create_calibration_quality_filter(
+        self,
+        timing_config: TimedCalibrationConfig,
+    ) -> CalibrationQualityFilter:
+        stability_config = (
+            FeatureStabilityConfig(
+                feature_indices=_HEAD_POSE_FEATURE_INDICES,
+                max_delta=self.posture_stability_max_delta,
+            )
+            if self.posture_stability_max_delta is not None
+            else None
+        )
+        return CalibrationQualityFilter(
+            min_confidence=timing_config.min_confidence,
+            stability_config=stability_config,
         )
 
     def _create_default_validation_session(self) -> ValidationSession:
@@ -475,12 +499,14 @@ class MainWindow(QMainWindow):
         self.calibration_view.set_flow(flow, title=title)
         self.calibration_target_overlay.flow = flow
         screen_width, screen_height = self._screen_size()
+        timing_config = TimedCalibrationConfig()
         self.calibration_session = CalibrationSession(
             flow=flow,
             model=LinearRidgeCalibrationModel(alpha=1.0),
             screen_width=screen_width,
             screen_height=screen_height,
-            timing_config=TimedCalibrationConfig(),
+            timing_config=timing_config,
+            quality_filter=self._create_calibration_quality_filter(timing_config),
             calibration_sample_window=self.calibration_sample_window,
         )
         self.gaze_runtime = GazeRuntime(model=cast(Any, self.calibration_session.model))

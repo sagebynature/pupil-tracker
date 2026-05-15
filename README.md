@@ -187,6 +187,14 @@ PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=late PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd
 
 The default live calibration sample window remains `all`; use `late` only for replay-backed manual validation until a fresh run confirms it improves practical grid/window selection.
 
+To test the opt-in posture/head-pose stability gate during calibration capture, launch with a positive feature-drift threshold:
+
+```bash
+PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.08 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo
+```
+
+The posture gate compares each target's captured samples against the first accepted sample for that target using the head-pose proxy features: roll, yaw, and pitch. Samples whose selected feature drift exceeds the threshold are rejected before calibration storage. Keep this gate experimental until a logged validation run shows better 4x3 grid accuracy without moving failures to other targets.
+
 Any future video/frame capture feature must be explicit opt-in and documented separately.
 
 ## Known MVP Limitations

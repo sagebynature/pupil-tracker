@@ -44,6 +44,20 @@ def _parse_positive_int(value: str, *, name: str) -> int:
     return parsed
 
 
+def _parse_optional_positive_float(value: str | None, *, name: str) -> float | None:
+    if value is None or value.strip() == "":
+        return None
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        msg = f"{name} must be a positive number"
+        raise ValueError(msg) from error
+    if parsed <= 0:
+        msg = f"{name} must be a positive number"
+        raise ValueError(msg)
+    return parsed
+
+
 def _parse_calibration_sample_window(value: str) -> CalibrationSampleWindow:
     normalized = value.strip().lower()
     if normalized in {"all", "early", "middle", "late"}:
@@ -73,6 +87,7 @@ class DemoConfig:
     validation_grid_rows: int = 3
     calibration_sample_window: CalibrationSampleWindow = "all"
     gaze_focus_enabled: bool = False
+    posture_stability_max_delta: float | None = None
 
     @classmethod
     def from_environment(cls) -> DemoConfig:
@@ -95,6 +110,10 @@ class DemoConfig:
             os.environ.get("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", "false"),
             name="PUPIL_TRACKER_GAZE_FOCUS_ENABLED",
         )
+        posture_stability_max_delta = _parse_optional_positive_float(
+            os.environ.get("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA"),
+            name="PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA",
+        )
         model_asset_value = os.environ.get("PUPIL_TRACKER_MEDIAPIPE_MODEL")
         model_asset_path = Path(model_asset_value) if model_asset_value else None
         return cls(
@@ -105,6 +124,7 @@ class DemoConfig:
             validation_grid_rows=validation_grid_rows,
             calibration_sample_window=calibration_sample_window,
             gaze_focus_enabled=gaze_focus_enabled,
+            posture_stability_max_delta=posture_stability_max_delta,
         )
 
     @property

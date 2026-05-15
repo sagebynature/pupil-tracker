@@ -18,6 +18,25 @@ class CalibrationSampleDecision:
 
 
 @dataclass(frozen=True)
+class FeatureStabilityConfig:
+    """Feature-drift limits for opt-in calibration posture stability checks."""
+
+    feature_indices: tuple[int, ...]
+    max_delta: float
+
+    def __post_init__(self) -> None:
+        if not self.feature_indices:
+            msg = "feature_indices must not be empty"
+            raise ValueError(msg)
+        if any(index < 0 for index in self.feature_indices):
+            msg = "feature indices must be non-negative"
+            raise ValueError(msg)
+        if self.max_delta <= 0:
+            msg = "max_delta must be positive"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True)
 class TargetQualitySummary:
     """Per-target calibration capture quality summary."""
 
@@ -37,6 +56,7 @@ class CalibrationQualityFilter:
         *,
         min_confidence: float,
         expected_feature_count: int | None = None,
+        stability_config: FeatureStabilityConfig | None = None,
     ) -> None:
         if not 0.0 <= min_confidence <= 1.0:
             msg = "min_confidence must be between 0 and 1"
@@ -46,8 +66,14 @@ class CalibrationQualityFilter:
             raise ValueError(msg)
         self.min_confidence = min_confidence
         self.expected_feature_count = expected_feature_count
+        self.stability_config = stability_config
 
-    def decide(self, observation: RawObservation) -> CalibrationSampleDecision:
+    def decide(
+        self,
+        observation: RawObservation,
+        *,
+        reference_features: Sequence[float] | None = None,
+    ) -> CalibrationSampleDecision:
         """Return whether `observation` should be accepted for calibration."""
 
         if not observation.valid:
@@ -78,7 +104,38 @@ class CalibrationQualityFilter:
                     f" != expected {self.expected_feature_count}"
                 ),
             )
+        stability_decision = self._decide_feature_stability(
+            observation.feature_vector,
+            reference_features=reference_features,
+        )
+        if stability_decision is not None:
+            return stability_decision
         return CalibrationSampleDecision(accepted=True, reason="accepted")
+
+    def _decide_feature_stability(
+        self,
+        features: Sequence[float],
+        *,
+        reference_features: Sequence[float] | None,
+    ) -> CalibrationSampleDecision | None:
+        if self.stability_config is None or reference_features is None:
+            return None
+        for index in self.stability_config.feature_indices:
+            if index >= len(features) or index >= len(reference_features):
+                return CalibrationSampleDecision(
+                    accepted=False,
+                    reason=f"feature {index} missing for stability check",
+                )
+            delta = abs(features[index] - reference_features[index])
+            if delta > self.stability_config.max_delta:
+                return CalibrationSampleDecision(
+                    accepted=False,
+                    reason=(
+                        f"feature {index} drift {delta:.3f}"
+                        f" exceeds {self.stability_config.max_delta:.3f}"
+                    ),
+                )
+        return None
 
 
 def summarize_target_quality(

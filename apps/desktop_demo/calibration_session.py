@@ -239,7 +239,14 @@ class CalibrationSession:
         quality_filter = self.quality_filter
         if quality_filter is None:
             return False
-        decision = quality_filter.decide(observation)
+        current_samples = self.flow.samples_for_current_target()
+        reference_features = (
+            current_samples[0].observation.feature_vector if current_samples else None
+        )
+        decision = quality_filter.decide(
+            observation,
+            reference_features=reference_features,
+        )
         if decision.accepted and self.flow.add_current_target_sample(observation):
             self.accepted_for_current_target += 1
         else:

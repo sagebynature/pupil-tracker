@@ -676,6 +676,28 @@ Offline replay still shows candidate instability rather than a clean promotion p
 
 Decision: do not promote the top-left focus geometry to default and do not add another model correction on this evidence. Keep the opt-in path because it produced a useful diagnostic signal: local geometry can correct `v0` vertical bias, but current scalar features/modeling are not stable enough to preserve the rest of the grid. Next high-leverage step is posture/head-pose gating or explicit pose normalization before collecting more calibration geometries.
 
+## Opt-In Posture Stability Gate Added
+
+Date: 2026-05-15
+
+Added an experimental calibration-capture gate controlled by `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA`. The gate is off by default. When enabled, each target uses its first accepted sample as the per-target reference and rejects later samples if any head-pose proxy feature drifts beyond the configured threshold.
+
+Selected feature indices:
+
+| Feature index | Meaning |
+|---:|---|
+| `20` | roll proxy |
+| `21` | yaw proxy |
+| `22` | pitch proxy |
+
+Rationale:
+
+1. Repeat-run diagnostics showed balanced sample counts but material drift in eye-relative vertical, face-center, and roll/slope-related signals.
+2. Geometry experiments can move the failure (`v0` improved under top-left focus) but do not preserve the full validation grid.
+3. The next controlled variable should be within-target posture stability, not another global model wrapper or denser target layout.
+
+Decision: keep this gate opt-in only. Compare the same calibration geometry with and without `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.08`; judge it by validation grid accuracy, per-target signed Y, and whether failures move to other targets.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:

@@ -8,6 +8,8 @@ from pathlib import Path
 from pupil_tracker.calibration import (
     CalibrationFitResult,
     CalibrationPhase,
+    CalibrationQualityFilter,
+    FeatureStabilityConfig,
     TimedCalibrationConfig,
 )
 from pupil_tracker.models import CalibrationSample, RawObservation
@@ -253,6 +255,38 @@ def test_timed_capture_phase_accepts_high_quality_observations() -> None:
     assert len(flow.samples_for_current_target()) == 1
     assert session.accepted_for_current_target == 1
     assert session.rejected_for_current_target == 0
+
+
+def test_timed_capture_rejects_posture_drift_against_target_reference() -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+
+    clock = FakeClock(now=0.0)
+    flow = CalibrationFlowState(samples_per_target=2)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeCalibrationModel(),
+        screen_width=1000,
+        screen_height=800,
+        timing_config=timed_config(),
+        clock=clock,
+        quality_filter=CalibrationQualityFilter(
+            min_confidence=0.6,
+            stability_config=FeatureStabilityConfig(
+                feature_indices=(0,),
+                max_delta=0.05,
+            ),
+        ),
+    )
+    session.start()
+    clock.advance(1.0)
+
+    assert session.capture(valid_observation(timestamp=1.0)) is False
+    assert session.capture(valid_observation(timestamp=1.2)) is False
+
+    assert len(flow.samples_for_current_target()) == 1
+    assert session.accepted_for_current_target == 1
+    assert session.rejected_for_current_target == 1
 
 
 def test_timed_low_quality_target_retries_instead_of_advancing() -> None:
