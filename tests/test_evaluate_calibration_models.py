@@ -14,10 +14,12 @@ if str(TOOLS_ROOT) not in sys.path:
 from evaluate_calibration_models import (  # noqa: E402
     ModelEvaluationResult,
     evaluate_replay_models,
+    filter_calibration_samples_by_window,
     format_model_evaluation_report,
     load_replay_dataset,
     sort_model_results,
 )
+from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObservation  # noqa: E402
 
 
 def _write_jsonl(path: Path, events: list[dict[str, object]]) -> None:
@@ -50,6 +52,22 @@ def _replay_event(
     }
 
 
+def _calibration_sample(target_id: str, sample_index: int) -> CalibrationSample:
+    return CalibrationSample(
+        target=CalibrationTarget(
+            id=target_id,
+            x=0.25 if target_id == "left" else 0.75,
+            y=0.5,
+        ),
+        observation=RawObservation(
+            timestamp=float(sample_index),
+            valid=True,
+            confidence=0.9,
+            feature_vector=(float(sample_index),),
+        ),
+    )
+
+
 def test_load_replay_dataset_reads_calibration_and_validation_samples(tmp_path: Path) -> None:
     log_path = tmp_path / "demo.jsonl"
     _write_jsonl(
@@ -70,6 +88,24 @@ def test_load_replay_dataset_reads_calibration_and_validation_samples(tmp_path: 
     assert dataset.calibration_samples[0].target.id == "c0"
     assert dataset.validation_observations[0].target.id == "v0"
     assert dataset.validation_observations[0].observation.feature_vector == (0.5, 0.5)
+
+
+def test_filter_calibration_samples_by_window_keeps_same_window_per_target() -> None:
+    samples = tuple(
+        _calibration_sample(target_id, sample_index)
+        for sample_index in range(6)
+        for target_id in ("left", "right")
+    )
+
+    all_samples = filter_calibration_samples_by_window(samples, window="all")
+    early = filter_calibration_samples_by_window(samples, window="early")
+    middle = filter_calibration_samples_by_window(samples, window="middle")
+    late = filter_calibration_samples_by_window(samples, window="late")
+
+    assert all_samples == samples
+    assert [sample.observation.feature_vector[0] for sample in early] == [0.0, 0.0, 1.0, 1.0]
+    assert [sample.observation.feature_vector[0] for sample in middle] == [2.0, 2.0, 3.0, 3.0]
+    assert [sample.observation.feature_vector[0] for sample in late] == [4.0, 4.0, 5.0, 5.0]
 
 
 def test_sort_model_results_supports_grid_first_objective() -> None:

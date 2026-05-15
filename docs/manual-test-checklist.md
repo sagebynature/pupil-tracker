@@ -137,7 +137,7 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 - [ ] Confirm events are JSON objects with scalar payloads.
 - [ ] Confirm telemetry includes expected event types such as `raw_observation`, `calibration_sample`, `calibration_replay_sample`, `calibration_target_quality`, `calibration_feature_diagnostics`, `validation_sample`, `validation_replay_sample`, `validation_metrics`, `gaze_sample`, and `window_candidate` when those actions occur.
 - [ ] Run `uv run python tools/analyze_feature_diagnostics.py metrics/demo.jsonl` and confirm it reports the latest diagnostics line, feature count, target means/stds, and top/bottom-vs-center deltas.
-- [ ] Run `uv run python tools/evaluate_calibration_models.py metrics/demo.jsonl --screen-width 1512 --screen-height 982 --grid-columns 4 --grid-rows 3 --objective grid` with the screen dimensions from the manual run and confirm it ranks candidate calibration models.
+- [ ] Run `uv run python tools/evaluate_calibration_models.py metrics/demo.jsonl --screen-width 1512 --screen-height 982 --grid-columns 4 --grid-rows 3 --objective grid --calibration-sample-window middle` with the screen dimensions from the manual run and confirm it ranks candidate calibration models. Use `--calibration-sample-window all|early|middle|late` to compare capture timing.
 - [ ] Confirm telemetry contains no frame arrays, camera images, screenshots, video paths, or binary blobs.
 - [ ] Confirm logging does not start until Start Logging is clicked.
 

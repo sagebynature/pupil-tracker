@@ -19,6 +19,7 @@ from pupil_tracker.calibration import (
 from pupil_tracker.models import CalibrationSample, CalibrationTarget, GazeSample, RawObservation
 
 EvaluationObjective = Literal["error", "grid"]
+SampleWindow = Literal["all", "early", "middle", "late"]
 
 
 class _ReplayCalibrationModel(Protocol):
@@ -227,6 +228,44 @@ def load_replay_dataset(path: Path) -> ReplayDataset:
     )
 
 
+def filter_calibration_samples_by_window(
+    samples: Sequence[CalibrationSample],
+    *,
+    window: SampleWindow,
+) -> tuple[CalibrationSample, ...]:
+    """Keep the same early/middle/late capture window for each target id."""
+
+    if window == "all":
+        return tuple(samples)
+
+    indices_by_target: dict[str, list[int]] = {}
+    for index, sample in enumerate(samples):
+        indices_by_target.setdefault(sample.target.id, []).append(index)
+
+    selected_indices: set[int] = set()
+    for indices in indices_by_target.values():
+        start, stop = _sample_window_bounds(len(indices), window=window)
+        selected_indices.update(indices[start:stop])
+
+    return tuple(
+        sample for index, sample in enumerate(samples) if index in selected_indices
+    )
+
+
+def _sample_window_bounds(sample_count: int, *, window: SampleWindow) -> tuple[int, int]:
+    if sample_count <= 0:
+        return (0, 0)
+    window_size = max(1, sample_count // 3)
+    if window == "early":
+        return (0, window_size)
+    if window == "middle":
+        start = (sample_count - window_size) // 2
+        return (start, start + window_size)
+    if window == "late":
+        return (sample_count - window_size, sample_count)
+    return (0, sample_count)
+
+
 def evaluate_replay_models(
     dataset: ReplayDataset,
     *,
@@ -235,12 +274,17 @@ def evaluate_replay_models(
     grid_columns: int,
     grid_rows: int,
     objective: EvaluationObjective = "error",
+    calibration_sample_window: SampleWindow = "all",
 ) -> tuple[ModelEvaluationResult, ...]:
     """Fit candidate models on replay calibration samples and score validation samples."""
 
     results: list[ModelEvaluationResult] = []
+    calibration_samples = filter_calibration_samples_by_window(
+        dataset.calibration_samples,
+        window=calibration_sample_window,
+    )
     for model_name, model in _candidate_models():
-        model.fit(dataset.calibration_samples, screen_width, screen_height)
+        model.fit(calibration_samples, screen_width, screen_height)
         validation_samples = tuple(
             ValidationSample(
                 target=replay_observation.target,
@@ -500,6 +544,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="grid",
         help="Rank models by grid-cell accuracy or mean pixel error.",
     )
+    parser.add_argument(
+        "--calibration-sample-window",
+        choices=("all", "early", "middle", "late"),
+        default="all",
+        help="Fit models with all or one third of each target's calibration samples.",
+    )
     args = parser.parse_args(argv)
     try:
         dataset = load_replay_dataset(args.log_path)
@@ -510,6 +560,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             grid_columns=args.grid_columns,
             grid_rows=args.grid_rows,
             objective=args.objective,
+            calibration_sample_window=args.calibration_sample_window,
         )
     except ValueError as error:
         _die(str(error))
