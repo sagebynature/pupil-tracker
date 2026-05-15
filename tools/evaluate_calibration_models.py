@@ -148,6 +148,73 @@ class BiasCorrectedCalibrationModel:
         )
 
 
+class VerticalBiasCorrectedCalibrationModel:
+    """Apply a one-dimensional Y residual correction learned from calibration predictions."""
+
+    def __init__(self, base_model: _ReplayCalibrationModel) -> None:
+        self._base_model = base_model
+        self._slope = 0.0
+        self._intercept = 0.0
+        self._fitted = False
+
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> Any:
+        result = self._base_model.fit(samples, screen_width, screen_height)
+        rows: list[tuple[float, float]] = []
+        for sample in samples:
+            if not sample.observation.valid:
+                continue
+            prediction = self._base_model.predict(
+                sample.observation,
+                screen_width,
+                screen_height,
+            )
+            if not prediction.valid:
+                continue
+            predicted_y_norm = prediction.y / screen_height
+            expected_y = sample.target.y * screen_height
+            rows.append((predicted_y_norm, expected_y - prediction.y))
+        if len(rows) < 2:
+            msg = "vertical bias correction requires at least 2 valid calibration predictions"
+            raise ValueError(msg)
+        mean_x = sum(row[0] for row in rows) / len(rows)
+        mean_y = sum(row[1] for row in rows) / len(rows)
+        denominator = sum((row[0] - mean_x) ** 2 for row in rows)
+        if denominator == 0:
+            self._slope = 0.0
+        else:
+            self._slope = sum((row[0] - mean_x) * (row[1] - mean_y) for row in rows) / denominator
+        self._intercept = mean_y - self._slope * mean_x
+        self._fitted = True
+        return result
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample:
+        if not self._fitted:
+            msg = "vertical-bias-corrected model is not fitted"
+            raise RuntimeError(msg)
+        sample = self._base_model.predict(observation, screen_width, screen_height)
+        if not sample.valid:
+            return sample
+        correction_y = self._intercept + self._slope * (sample.y / screen_height)
+        return GazeSample(
+            timestamp=sample.timestamp,
+            x=sample.x,
+            y=sample.y + correction_y,
+            confidence=sample.confidence,
+            valid=True,
+            region_id=sample.region_id,
+        )
+
+
 class AffineCorrectedCalibrationModel:
     """Apply a 2D affine correction learned from calibration predictions."""
 
@@ -630,7 +697,15 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
     poly_1 = PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
     base_candidates = (
         ReplayModelCandidate("linear-alpha-0.1", LinearRidgeCalibrationModel(alpha=0.1)),
+        ReplayModelCandidate(
+            "linear-alpha-0.1-vertical-bias-corrected",
+            VerticalBiasCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=0.1)),
+        ),
         ReplayModelCandidate("linear-alpha-1.0", linear_1),
+        ReplayModelCandidate(
+            "linear-alpha-1.0-vertical-bias-corrected",
+            VerticalBiasCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
+        ),
         ReplayModelCandidate(
             "linear-alpha-1.0-bias-corrected",
             BiasCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
@@ -646,6 +721,12 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
         ),
         ReplayModelCandidate("poly2-alpha-1.0", poly_1),
         ReplayModelCandidate(
+            "poly2-alpha-1.0-vertical-bias-corrected",
+            VerticalBiasCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
+            ),
+        ),
+        ReplayModelCandidate(
             "poly2-alpha-1.0-bias-corrected",
             BiasCorrectedCalibrationModel(
                 PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
@@ -660,6 +741,12 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
         ReplayModelCandidate(
             "poly2-alpha-10.0",
             PolynomialRidgeCalibrationModel(degree=2, alpha=10.0),
+        ),
+        ReplayModelCandidate(
+            "poly2-alpha-10.0-vertical-bias-corrected",
+            VerticalBiasCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=10.0)
+            ),
         ),
     )
     weighting_policies: tuple[TargetWeightingPolicy, ...] = (
