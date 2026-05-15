@@ -449,6 +449,53 @@ Interpretation:
 
 Decision: keep Start Edge-Dense Calibration as an experimental option. Do not change the default 9-point calibration path, default sample window, or live model/correction policy yet.
 
+## Second Edge-Dense Live Validation
+
+Date: 2026-05-15
+
+A second logged edge-dense run spans lines `59074`-`64477` and includes `1301` calibration replay samples across the same 17 calibration targets plus `317` validation replay samples.
+
+Live validation metrics:
+
+| Metric | First Edge-Dense | Second Edge-Dense |
+|---|---:|---:|
+| Mean error | `181.13 px` | `255.25 px` |
+| Max error | `518.95 px` | `505.20 px` |
+| Mean X error | `88.46 px` | `89.61 px` |
+| Mean Y error | `148.50 px` | `225.77 px` |
+| Signed Y bias | `+17.53 px` | `+130.06 px` |
+| 4x3 grid accuracy | `41.6%` | `38.9%` |
+| Recommendation | `usable` | `retry` |
+
+Second-run per-target validation behavior:
+
+| Target | Mean Error | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|
+| `v0` | `471.18 px` | `+347.68 px` | `0.0%` |
+| `v1` | `363.57 px` | `+361.64 px` | `0.0%` |
+| `v2` | `183.33 px` | `+180.28 px` | `94.7%` |
+| `v3` | `169.61 px` | `-166.62 px` | `0.0%` |
+| `v4` | `88.57 px` | `-72.66 px` | `100.0%` |
+
+Replay evaluation of the second run did not show a promotable offline candidate:
+
+| Calibration Window | Best Grid Candidate | Grid Accuracy | Mean Error | Recommendation |
+|---|---|---:|---:|---|
+| `all` | `poly2-alpha-0.1` | `28.7%` | `323.55 px` | `retry` |
+| `early` | `linear-alpha-0.1` | `23.7%` | `292.65 px` | `retry` |
+| `middle` | `poly2-alpha-1.0` | `30.3%` | `241.45 px` | `retry` |
+| `late` | `poly2-alpha-1.0` | `37.2%` | `232.78 px` | `retry` |
+
+Interpretation:
+
+1. The second edge-dense run did not reproduce the first run's `usable` result. Grid accuracy stayed near the previous live baseline, but mean error and signed Y bias regressed sharply.
+2. The repeated pattern is not one stable failed corner: first run failed `v0`/`v4`; second run failed `v0`/`v1`/`v3` while `v4` became `100%`.
+3. The stable failure class is large target-specific vertical error, especially on off-center validation targets, not a specific global correction problem.
+4. Do not promote edge-dense calibration, middle/late sample windows, or any replay correction from these two runs.
+5. Next implementation should add target-specific diagnostics that compare calibration target quality, feature distribution, and residuals across repeated live runs before more geometry changes. If adding behavior rather than diagnostics, make it an explicit asymmetric-geometry experiment behind a separate control.
+
+Decision: keep edge-dense as an experimental manual option only. The next code slice should improve diagnosis/reproducibility, not tune another global model wrapper.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -459,7 +506,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`, so the geometry change is promising but not default-ready. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model until calibration geometry changes beat the current baseline reproducibly in live validation.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model. Prioritize repeat-run target-specific diagnostics before more geometry/model tuning.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
