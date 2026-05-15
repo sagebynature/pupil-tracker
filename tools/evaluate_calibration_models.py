@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from math import hypot
@@ -23,7 +23,7 @@ from pupil_tracker.models import CalibrationSample, CalibrationTarget, GazeSampl
 EvaluationObjective = Literal["error", "grid"]
 SampleWindow = Literal["all", "early", "middle", "late"]
 TargetWeightingPolicy = Literal["none", "vertical_edges", "screen_edges", "corners"]
-ResidualRow = tuple[float, float, float, float, float, bool | None]
+ResidualRow = tuple[float, float, float, float, float, bool | None, str | None]
 
 
 class _ReplayCalibrationModel(Protocol):
@@ -102,6 +102,7 @@ class TargetResidualSummary:
     mean_signed_x_error_px: float
     mean_signed_y_error_px: float
     grid_cell_accuracy: float | None = None
+    predicted_cell_counts: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -718,7 +719,7 @@ def summarize_calibration_target_residuals(
         dx = prediction.x - target_x
         dy = prediction.y - target_y
         rows_by_target[sample.target.id].append(
-            (sample.target.x, sample.target.y, dx, dy, hypot(dx, dy), None)
+            (sample.target.x, sample.target.y, dx, dy, hypot(dx, dy), None, None)
         )
     return _summarize_residual_rows(rows_by_target)
 
@@ -765,6 +766,7 @@ def summarize_validation_target_residuals(
                 dy,
                 hypot(dx, dy),
                 target_cell == gaze_cell,
+                gaze_cell,
             )
         )
     return _summarize_residual_rows(rows_by_target)
@@ -781,6 +783,7 @@ def _summarize_residual_rows(
         signed_y_errors = [row[3] for row in rows]
         errors = [row[4] for row in rows]
         grid_matches = [row[5] for row in rows if row[5] is not None]
+        predicted_cell_counter = Counter(row[6] for row in rows if row[6] is not None)
         summaries.append(
             TargetResidualSummary(
                 target_id=target_id,
@@ -798,6 +801,12 @@ def _summarize_residual_rows(
                     sum(1 for value in grid_matches if value) / len(grid_matches)
                     if grid_matches
                     else None
+                ),
+                predicted_cell_counts=tuple(
+                    sorted(
+                        predicted_cell_counter.items(),
+                        key=lambda item: (-item[1], item[0]),
+                    )
                 ),
             )
         )
@@ -963,8 +972,8 @@ def format_target_residual_report(result: ModelEvaluationResult) -> str:
 def _format_residual_table(summaries: Sequence[TargetResidualSummary]) -> str:
     lines = [
         "| Target | Target X | Target Y | Samples | Mean Error | Mean X | Mean Y | "
-        "Signed X | Signed Y | Grid Accuracy |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "Signed X | Signed Y | Grid Accuracy | Predicted Cells |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for summary in summaries:
         grid_accuracy = (
@@ -983,9 +992,16 @@ def _format_residual_table(summaries: Sequence[TargetResidualSummary]) -> str:
             f"{summary.mean_abs_y_error_px:.2f} px | "
             f"{summary.mean_signed_x_error_px:+.2f} px | "
             f"{summary.mean_signed_y_error_px:+.2f} px | "
-            f"{grid_accuracy} |"
+            f"{grid_accuracy} | "
+            f"{_format_predicted_cell_counts(summary.predicted_cell_counts)} |"
         )
     return "\n".join(lines)
+
+
+def _format_predicted_cell_counts(cell_counts: Sequence[tuple[str, int]]) -> str:
+    if not cell_counts:
+        return "N/A"
+    return ", ".join(f"{cell}: {count}" for cell, count in cell_counts)
 
 
 def _calibration_prediction_residuals(

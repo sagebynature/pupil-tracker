@@ -852,6 +852,40 @@ Top replay candidate from the same run remained `poly2-alpha-0.1` at `214.32 px`
 
 Decision: keep pose normalization evaluator-only and do not promote it to live calibration. The cheap proxy residualization is not the lever. Move next to stronger head-pose estimation or geometry/target sampling diagnostics rather than another correction wrapper.
 
+## Validation Grid-Cell Collapse Diagnostics
+
+Date: 2026-05-15
+
+The replay evaluator now includes `Predicted Cells` in target residual tables. This is scalar-only and report-only: it counts which coarse grid cells each target's predicted gaze samples land in, making row/column collapse visible without images, frames, or raw landmark dumps.
+
+Decision-aware posture-gate Run 3 (`110622:115687`) live validation, analyzed with `5120x1440`, shows row-collapse directly:
+
+| Target | Grid Accuracy | Signed X | Signed Y | Predicted Cells |
+|---|---:|---:|---:|---|
+| `v0` | `0.0%` | `-189.79 px` | `+293.50 px` | `r1c0=37` |
+| `v1` | `2.7%` | `+35.57 px` | `+200.46 px` | `r1c3=30`, `r1c2=6`, `r2c3=5`, `r0c3=1` |
+| `v2` | `83.8%` | `+36.69 px` | `+84.81 px` | `r1c2=31`, `r1c1=6` |
+| `v3` | `0.0%` | `+127.75 px` | `-174.98 px` | `r1c1=37` |
+| `v4` | `8.1%` | `+95.75 px` | `-154.72 px` | `r1c3=34`, `r2c3=3` |
+
+The best replay candidate for the same extracted run remains `poly2-alpha-0.1` (`51.1%` grid, `214.32 px` mean error), but target residuals show it still fails important held-out regions:
+
+| Target | Grid Accuracy | Signed X | Signed Y | Predicted Cells |
+|---|---:|---:|---:|---|
+| `v0` | `7.8%` | `+78.50 px` | `+216.01 px` | `r1c1=33`, `r1c0=13`, `r2c2=9`, `r0c1=5`, `r0c0=2`, `r2c1=2` |
+| `v1` | `0.0%` | `-92.83 px` | `+216.99 px` | `r1c3=47`, `r1c0=6`, `r1c1=4`, `r2c2=4`, `r1c2=2` |
+| `v2` | `82.8%` | `+92.14 px` | `+49.66 px` | `r1c2=53`, `r1c3=9`, `r1c1=2` |
+| `v3` | `85.5%` | `+140.13 px` | `+32.05 px` | `r2c1=53`, `r1c2=8`, `r1c1=1` |
+| `v4` | `79.7%` | `-43.55 px` | `+103.45 px` | `r2c3=51`, `r2c1=10`, `r2c2=3` |
+
+Interpretation:
+
+1. The live linear model is not just noisy at individual corners; it compresses top and bottom validation rows into the middle row (`r1*`) for `v0`, `v3`, and most of `v4`.
+2. The best offline polynomial candidate recovers `v3`/`v4` and the center but still sends top validation targets down into `r1*`, especially `v0` and `v1`.
+3. This confirms the next lever should be geometry/target sampling or a stronger geometric pose signal. Another correction wrapper is unlikely to solve the held-out top-row collapse repeatably.
+
+Decision: keep the predicted-cell diagnostic in evaluator reports and use it as the gate for the next experiment. Do not promote `poly2-alpha-0.1` live from this replay alone because it still leaves top-row held-out targets collapsed.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:

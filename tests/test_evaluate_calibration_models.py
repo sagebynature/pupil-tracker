@@ -581,6 +581,52 @@ def test_sort_model_results_supports_grid_first_objective() -> None:
     ]
 
 
+def test_validation_target_residuals_include_predicted_cell_distribution() -> None:
+    samples = (
+        ValidationSample(
+            target=ValidationTarget(id="v0", x=0.125, y=0.125),
+            gaze_sample=GazeSample(
+                timestamp=1.0,
+                x=12.5,
+                y=12.5,
+                confidence=0.9,
+                valid=True,
+            ),
+        ),
+        ValidationSample(
+            target=ValidationTarget(id="v0", x=0.125, y=0.125),
+            gaze_sample=GazeSample(
+                timestamp=2.0,
+                x=37.5,
+                y=12.5,
+                confidence=0.9,
+                valid=True,
+            ),
+        ),
+        ValidationSample(
+            target=ValidationTarget(id="v0", x=0.125, y=0.125),
+            gaze_sample=GazeSample(
+                timestamp=3.0,
+                x=37.5,
+                y=12.5,
+                confidence=0.9,
+                valid=True,
+            ),
+        ),
+    )
+
+    summary = summarize_validation_target_residuals(
+        samples,
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=4,
+    )[0]
+
+    assert summary.grid_cell_accuracy == pytest.approx(1 / 3)
+    assert summary.predicted_cell_counts == (("r0c1", 2), ("r0c0", 1))
+
+
 def test_corrected_candidates_can_reduce_regularized_mapping_error(tmp_path: Path) -> None:
     log_path = tmp_path / "demo.jsonl"
     events = [
