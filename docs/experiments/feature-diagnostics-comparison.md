@@ -779,6 +779,60 @@ One telemetry caveat surfaced during analysis: `calibration_replay_sample` curre
 
 Decision: do not promote `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05`. Do not ask for another manual run until the decision-aware telemetry build has passed automated checks and been launched; the next validation should confirm whether any future threshold actually rejects capture samples before judging grid accuracy.
 
+## Posture Stability Gate Run 3 Analysis
+
+Date: 2026-05-15
+
+Run range: `110622:115687`; calibration config line: `110622`; validation metrics line: `115687`.
+
+The run used the decision-aware telemetry build with `calibration_path: edge_dense`, `calibration_sample_window: all`, `LinearRidgeCalibrationModel`, and `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05`.
+
+Live validation metric summary:
+
+| Metric | Third Edge-Dense Baseline | Posture Gate 0.05 Run 2 | Posture Gate 0.05 Run 3 |
+|---|---:|---:|---:|
+| Sample count | `190` | `190` | `189` |
+| Mean error | `221.95 px` | `260.53 px` | `222.19 px` |
+| Median error | `237.66 px` | `252.29 px` | `200.57 px` |
+| Max error | `499.99 px` | `962.99 px` | `686.80 px` |
+| Mean X error | `143.69 px` | `145.07 px` | `119.18 px` |
+| Mean Y error | `138.07 px` | `186.41 px` | `181.06 px` |
+| Signed Y bias | `-33.76 px` | `-28.39 px` | `+48.00 px` |
+| 4x3 grid accuracy | `42.1%` | `36.8%` | `18.0%` |
+| Recommendation | `retry` | `retry` | `retry` |
+
+Decision-aware calibration replay showed:
+
+| Signal | Count |
+|---|---:|
+| `calibration_replay_sample` events | `1297` |
+| `sample_accepted: true` | `864` |
+| `sample_accepted: false` | `433` |
+| `capture_phase: settling` | `432` |
+| `capture_phase: capturing` | `864` |
+| `capture_phase: complete` | `1` |
+| Target-quality rejected samples | `0` |
+
+The `sample_accepted: false` samples were settle/not-evaluated observations, not posture-gate rejections. Accepted capture samples were very stable under the selected head-pose proxy indices: the largest accepted within-target drift against the first accepted sample was only `0.0175`, and a replay check found zero hypothetical accepted-sample rejections even at `0.02`.
+
+Per-target validation behavior for the decision-aware `0.05` run:
+
+| Target | Mean Error | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|
+| `v0` | `348.57 px` | `+290.04 px` | `0.0%` |
+| `v1` | `255.81 px` | `+196.19 px` | `5.3%` |
+| `v2` | `99.26 px` | `+83.40 px` | `78.9%` |
+| `v3` | `219.94 px` | `-176.98 px` | `0.0%` |
+| `v4` | `187.31 px` | `-158.57 px` | `5.3%` |
+
+Interpretation:
+
+1. The posture gate is now auditable, and the evidence is clear: `0.05` does not reject capture samples.
+2. The captured head-pose proxy features were already stable during accepted capture windows, but validation grid accuracy still collapsed to `18.0%`.
+3. The dominant failure is not within-target head-pose drift under indices `20`, `21`, and `22`; it is still target/feature/model mismatch across screen regions, especially top/bottom and edge validation targets.
+
+Decision: stop spending manual runs on `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05`. Keep the gate opt-in for future experiments, but do not promote it. The next higher-leverage slice should be evaluator-only pose normalization or a stronger head-pose estimate, not another threshold-only run.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:

@@ -121,9 +121,9 @@ Use this path only when investigating the persistent top-left `v0` collapse afte
 
 ## Experimental Posture Stability Gate
 
-Use this path only after geometry experiments move failures between targets instead of improving the full grid. It is not the default.
+Use this path only after geometry experiments move failures between targets instead of improving the full grid. It is not the default. Current evidence shows `0.05` does not reject accepted capture samples, so do not spend additional manual runs on threshold-only posture gating unless a new hypothesis changes the gated features.
 
-- [ ] Launch with `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
+- [ ] If explicitly re-running this experiment, launch with `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
 - [ ] Start logging before calibration so replay samples, validation metrics, and the `calibration_config` event are captured.
 - [ ] After the decision-aware telemetry build, confirm `calibration_replay_sample` events include `capture_phase`, `sample_accepted`, and `decision_reason` so settle/capture/rejected samples can be separated during analysis.
 - [ ] Use the same calibration geometry as the comparison run; change only the posture gate variable.
