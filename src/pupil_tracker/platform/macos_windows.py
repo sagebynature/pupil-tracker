@@ -55,7 +55,10 @@ def candidate_at_point(
 def list_visible_windows() -> tuple[WindowCandidate, ...]:
     """Enumerate visible macOS windows through CoreGraphics when available."""
 
-    quartz = cast(Any, import_module("Quartz"))
+    try:
+        quartz = cast(Any, import_module("Quartz"))
+    except ModuleNotFoundError:
+        return ()
     raw_records = quartz.CGWindowListCopyWindowInfo(
         quartz.kCGWindowListOptionOnScreenOnly,
         quartz.kCGNullWindowID,

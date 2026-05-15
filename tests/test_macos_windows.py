@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from pupil_tracker.models import Point2D
+from pupil_tracker.platform import macos_windows
 from pupil_tracker.platform.macos_windows import candidate_at_point, visible_window_candidates
 
 
@@ -55,6 +58,18 @@ def test_window_record_process_id_is_preserved_when_available() -> None:
     candidates = visible_window_candidates([record])
 
     assert candidates[0].process_id == 4242
+
+
+def test_list_visible_windows_returns_empty_when_quartz_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_quartz(name: str) -> object:
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setattr(macos_windows, "import_module", missing_quartz)
+
+    assert macos_windows.list_visible_windows() == ()
+
 
 def test_overlapping_windows_choose_higher_frontmost_score() -> None:
     candidates = visible_window_candidates([
