@@ -157,6 +157,38 @@ Interpretation:
 3. `linear-alpha-1.0-affine-corrected` is the best offline grid candidate at `32.2%`, improving over the uncorrected `linear-alpha-1.0` result (`19.7%`) but still under the latest live validation result (`40.0%`).
 4. Do not promote any corrected offline candidate to the live model yet. Post-fit affine correction is promising enough to keep in the evaluator, but current evidence points to calibration geometry / target sampling as the next higher-leverage slice.
 
+## Calibration Sample-Window Evaluation
+
+Date: 2026-05-15
+
+The replay evaluator was extended to fit models with `all`, `early`, `middle`, or `late` calibration samples per target. This tests whether capture timing within each target affects grid-cell performance.
+
+Top grid candidate per sample window:
+
+| Calibration Window | Top Grid Model | Mean Error | Mean X | Mean Y | Signed Y | Grid Accuracy | Recommendation |
+|---|---|---:|---:|---:|---:|---:|---|
+| `all` | `linear-alpha-1.0-affine-corrected` | 201.60 px | 116.07 px | 131.88 px | -17.53 px | 32.2% | retry |
+| `early` | `poly2-alpha-1.0-affine-corrected` | 217.60 px | 164.60 px | 109.98 px | +44.21 px | 16.6% | retry |
+| `middle` | `poly2-alpha-1.0-affine-corrected` | 194.96 px | 130.51 px | 108.50 px | +9.16 px | 40.9% | usable |
+| `late` | `poly2-alpha-1.0-affine-corrected` | 201.50 px | 130.25 px | 117.02 px | -10.96 px | 42.2% | retry |
+
+Best pixel-error candidate per sample window:
+
+| Calibration Window | Best Error Model | Mean Error | Grid Accuracy |
+|---|---|---:|---:|
+| `all` | `poly2-alpha-1.0-affine-corrected` | 178.09 px | 13.4% |
+| `early` | `linear-alpha-1.0-affine-corrected` | 217.14 px | 7.8% |
+| `middle` | `poly2-alpha-0.1` | 175.88 px | 23.1% |
+| `late` | `poly2-alpha-0.1` | 172.89 px | 34.4% |
+
+Interpretation:
+
+1. Sample timing matters. `early` calibration samples are clearly worse for grid accuracy.
+2. `middle` and `late` windows beat the latest live validation grid result (`40.0%`) by a small margin: `40.9%` and `42.2%` respectively.
+3. The winning grid model in both cases is `poly2-alpha-1.0-affine-corrected`, but `late` is marked `retry` because mean error remains above the recommendation threshold.
+4. The gain is real enough to justify a live-calibration sampling slice, but not strong enough to treat the current model as dependable.
+5. Next implementation candidate: fit the live model from the late third of accepted samples per target, or expose a replay-backed calibration sample policy behind a small config seam before changing the default.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -167,7 +199,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay now shows corrected candidates can improve over their base models, but no offline candidate beats the latest live grid result. Keep the features and evaluator corrections for now, but do not treat the current build as ready for dependable window selection until calibration geometry or sampling improves grid-cell accuracy.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay now shows corrected candidates can improve over their base models, and sample-window replay shows middle/late calibration samples can slightly beat the latest live grid result. Keep the features and evaluator corrections for now; the next live slice should test a replay-backed calibration sample policy before treating the build as dependable for window selection.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
