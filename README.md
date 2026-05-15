@@ -172,7 +172,7 @@ When two logged live runs disagree, compare target-specific validation behavior 
 uv run python tools/analyze_repeat_run_diagnostics.py metrics/demo.jsonl --run START1:END1 --run START2:END2 --screen-width WIDTH --screen-height HEIGHT --grid-columns 4 --grid-rows 3
 ```
 
-The repeat-run analyzer uses scalar `validation_sample`, `validation_metrics`, and `calibration_replay_sample` events, trims each run to the latest metrics sample window per target, and reports signed residual shifts, grid collapse/recovery flags, predicted grid-cell distributions, and calibration feature-drift deltas. It does not require or emit frames, screenshots, or landmark dumps.
+The repeat-run analyzer uses scalar `validation_sample`, `validation_metrics`, and `calibration_replay_sample` events, trims each run to the latest metrics sample window per target, and reports signed residual shifts, grid collapse/recovery flags, predicted grid-cell distributions, and calibration feature-drift deltas with named dominant feature changes. It does not require or emit frames, screenshots, or landmark dumps.
 
 To validate the live late-sample policy without changing the default, launch the demo with:
 

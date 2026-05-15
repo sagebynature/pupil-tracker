@@ -286,10 +286,10 @@ def test_repeat_run_diagnostics_report_includes_calibration_feature_drift(
         log_path,
         [
             _calibration_replay_sample(
-                "top_left", target_x=0.1, target_y=0.1, features=(1.0, 10.0)
+                "top_left", target_x=0.1, target_y=0.1, features=(1.0, 10.0, 0.5)
             ),
             _calibration_replay_sample(
-                "top_left", target_x=0.1, target_y=0.1, features=(5.0, 13.0)
+                "top_left", target_x=0.1, target_y=0.1, features=(5.0, 13.0, 1.5)
             ),
         ],
     )
@@ -306,5 +306,14 @@ def test_repeat_run_diagnostics_report_includes_calibration_feature_drift(
     report = format_repeat_run_diagnostics_report(diagnostics)
 
     assert "### Calibration feature drift" in report
-    assert "| Target | Samples A | Samples B | Max Mean Δ | Mean Δ | Flags |" in report
-    assert "| top_left | 1 | 1 | 4.000000 | [4.000000, 3.000000] | feature-drift |" in report
+    assert (
+        "| Target | Samples A | Samples B | Max Mean Δ | Dominant Mean Δ Features | "
+        "Mean Δ | Flags |"
+    ) in report
+    assert (
+        "| top_left | 1 | 1 | 4.000000 | "
+        "left iris face-relative X=+4.000000, "
+        "left iris face-relative Y=+3.000000, "
+        "right iris face-relative X=+1.000000 | "
+        "[4.000000, 3.000000, 1.000000] | feature-drift |"
+    ) in report

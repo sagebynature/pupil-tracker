@@ -11,6 +11,32 @@ from math import hypot, sqrt
 from pathlib import Path
 from typing import NoReturn, cast
 
+FEATURE_NAMES: tuple[str, ...] = (
+    "left iris face-relative X",
+    "left iris face-relative Y",
+    "right iris face-relative X",
+    "right iris face-relative Y",
+    "iris midpoint face-relative X",
+    "iris midpoint face-relative Y",
+    "left iris eye-relative X",
+    "left iris eye-relative Y",
+    "right iris eye-relative X",
+    "right iris eye-relative Y",
+    "left eye aperture",
+    "right eye aperture",
+    "eye-relative Y midpoint",
+    "left-right eye-relative Y delta",
+    "face center X",
+    "face center Y",
+    "face width",
+    "face height",
+    "face aspect ratio",
+    "interocular distance",
+    "roll proxy",
+    "yaw proxy",
+    "pitch proxy",
+)
+
 
 @dataclass(frozen=True)
 class RunRange:
@@ -283,8 +309,9 @@ def format_repeat_run_diagnostics_report(diagnostics: RepeatRunDiagnostics) -> s
                 "",
                 "### Calibration feature drift",
                 "",
-                "| Target | Samples A | Samples B | Max Mean Δ | Mean Δ | Flags |",
-                "|---|---:|---:|---:|---|---|",
+                "| Target | Samples A | Samples B | Max Mean Δ | "
+                "Dominant Mean Δ Features | Mean Δ | Flags |",
+                "|---|---:|---:|---:|---|---|---|",
             )
         )
         first_run = diagnostics.runs[0]
@@ -302,6 +329,7 @@ def format_repeat_run_diagnostics_report(diagnostics: RepeatRunDiagnostics) -> s
                 f"{first_summary.accepted_count} | "
                 f"{second_summary.accepted_count} | "
                 f"{delta.max_abs_mean_delta:.6f} | "
+                f"{_format_named_feature_deltas(delta.mean_delta)} | "
                 f"{_format_vector(delta.mean_delta)} | "
                 f"{flags} |"
             )
@@ -507,6 +535,24 @@ def _vector_delta(left: Sequence[float], right: Sequence[float]) -> tuple[float,
 
 def _format_vector(values: Sequence[float]) -> str:
     return "[" + ", ".join(f"{value:.6f}" for value in values) + "]"
+
+
+def _format_named_feature_deltas(values: Sequence[float], *, limit: int = 3) -> str:
+    ranked = sorted(
+        enumerate(values),
+        key=lambda item: (-abs(item[1]), item[0]),
+    )[:limit]
+    if not ranked:
+        return "-"
+    return ", ".join(
+        f"{_feature_name(index)}={value:+.6f}" for index, value in ranked
+    )
+
+
+def _feature_name(index: int) -> str:
+    if index < len(FEATURE_NAMES):
+        return FEATURE_NAMES[index]
+    return f"feature[{index}]"
 
 
 def _target_delta_flags(
