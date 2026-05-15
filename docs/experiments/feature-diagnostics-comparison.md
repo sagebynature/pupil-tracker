@@ -189,6 +189,60 @@ Interpretation:
 4. The gain is real enough to justify a live-calibration sampling slice, but not strong enough to treat the current model as dependable.
 5. Next implementation candidate: run a fresh live manual validation with `PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=late`. The implementation now supports the policy behind config, while the default remains `all` until live evidence confirms it.
 
+## Late-Window Live Validation
+
+Date: 2026-05-15
+
+A fresh manual run was launched with `PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=late`.
+
+Latest run evidence:
+
+- `calibration_feature_diagnostics`: line `52159`
+- `validation_metrics`: line `53453`
+- `calibration_replay_sample` events in latest run: `1150`
+- `validation_replay_sample` events in latest run: `319`
+
+Live validation metrics from the late-window run:
+
+| Metric | Value |
+|---|---:|
+| Sample count | `190` |
+| Mean error | `296.41 px` |
+| Median error | `317.47 px` |
+| Max error | `659.10 px` |
+| Mean X error | `153.18 px` |
+| Mean Y error | `217.05 px` |
+| Signed Y bias | `+70.05 px` |
+| 4x3 grid accuracy | `30.0%` |
+| Recommendation | `retry` |
+
+Per-target grid accuracy shows the failure is concentrated, not uniform:
+
+| Target | Grid Accuracy | Signed Y Error |
+|---|---:|---:|
+| `v0` | `0.0%` | `+446.58 px` |
+| `v1` | `47.4%` | `+145.12 px` |
+| `v2` | `97.4%` | `+119.88 px` |
+| `v3` | `0.0%` | `-72.49 px` |
+| `v4` | `5.3%` | `-288.86 px` |
+
+Offline replay on only the latest run confirms the live late-window policy was not a win for the current default polynomial model:
+
+| Calibration Window | Top Grid Model | Mean Error | Mean Y | Signed Y | Grid Accuracy | Recommendation |
+|---|---|---:|---:|---:|---:|---|
+| `all` | `linear-alpha-0.1` | 253.15 px | 169.91 px | +147.64 px | 40.1% | retry |
+| `early` | `linear-alpha-0.1` | 237.80 px | 164.46 px | +132.90 px | 43.3% | retry |
+| `middle` | `poly2-alpha-1.0-affine-corrected` | 256.27 px | 179.34 px | +103.23 px | 29.8% | retry |
+| `late` | `poly2-alpha-1.0` | 237.83 px | 159.95 px | +66.86 px | 28.5% | retry |
+
+Interpretation:
+
+1. The late-window live policy regressed practical grid accuracy from the previous live baseline (`40.0%`) to `30.0%`.
+2. Do not change the default calibration sample window from `all` to `late`.
+3. The latest run has severe target-specific vertical failures (`v0`, `v3`, `v4`), which points to run stability / target geometry / validation sampling rather than a simple late-sample improvement.
+4. The latest replay still shows some model-form sensitivity (`linear-alpha-0.1` with early/all windows reaches `40.1%`-`43.3%` offline), but every candidate remains `retry`; do not promote a model solely from this noisy run.
+5. Next implementation should compare target-specific residuals and calibration/validation target geometry before another default live policy change.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -199,7 +253,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay now shows corrected candidates can improve over their base models, and sample-window replay shows middle/late calibration samples can slightly beat the latest live grid result. Keep the features and evaluator corrections for now; the next manual gate is a late-window live calibration run before treating the build as dependable for window selection.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Keep the features and evaluator corrections for now; do not change the default sample window or live model until target-specific residual analysis explains the run-to-run instability.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
