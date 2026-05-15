@@ -833,6 +833,25 @@ Interpretation:
 
 Decision: stop spending manual runs on `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05`. Keep the gate opt-in for future experiments, but do not promote it. The next higher-leverage slice should be evaluator-only pose normalization or a stronger head-pose estimate, not another threshold-only run.
 
+## Evaluator-Only Pose Normalization
+
+Date: 2026-05-15
+
+The replay evaluator now includes opt-in candidate models that linearly normalize non-pose scalar features against the cheap head-pose proxy dimensions (`20`, `21`, `22`) before fitting the base calibration model. This is evaluator-only; no live calibration or tracking path changed.
+
+Run range: `110622:115687`; command used the latest decision-aware posture-gate run with `--objective grid`, `--calibration-sample-window all`, and target residuals.
+
+Pose-normalized replay results:
+
+| Model | Mean Error | Mean X | Mean Y | Signed Y | 4x3 Grid Accuracy | Recommendation |
+|---|---:|---:|---:|---:|---:|---|
+| `linear-alpha-1.0-pose-normalized` | 338.67 px | 299.65 px | 135.16 px | -48.88 px | 22.4% | retry |
+| `poly2-alpha-1.0-pose-normalized` | 344.70 px | 300.62 px | 147.18 px | -121.19 px | 21.1% | retry |
+
+Top replay candidate from the same run remained `poly2-alpha-0.1` at `214.32 px` mean error and `51.1%` grid accuracy. The pose-normalized candidates reduce neither grid collapse nor pixel error; they introduce very large X error and trail the best replay candidate by about 29-30 percentage points of grid accuracy.
+
+Decision: keep pose normalization evaluator-only and do not promote it to live calibration. The cheap proxy residualization is not the lever. Move next to stronger head-pose estimation or geometry/target sampling diagnostics rather than another correction wrapper.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:

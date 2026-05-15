@@ -52,6 +52,16 @@ class _CoordinateCorrector(Protocol):
     def predict(self, coordinates: Sequence[tuple[float, float]]) -> Any: ...
 
 
+class _FeatureRegressor(Protocol):
+    def fit(
+        self,
+        x_train: Sequence[tuple[float, ...]],
+        y_train: Sequence[float],
+    ) -> Any: ...
+
+    def predict(self, features: Sequence[tuple[float, ...]]) -> Any: ...
+
+
 @dataclass(frozen=True)
 class ReplayModelCandidate:
     """Evaluator-only model candidate plus optional calibration weighting policy."""
@@ -102,6 +112,156 @@ class ModelEvaluationResult:
     metrics: Any
     calibration_target_residuals: tuple[TargetResidualSummary, ...] = ()
     validation_target_residuals: tuple[TargetResidualSummary, ...] = ()
+
+
+class PoseNormalizedCalibrationModel:
+    """Normalize feature vectors against cheap head-pose/context drift before fitting."""
+
+    def __init__(
+        self,
+        base_model: _ReplayCalibrationModel,
+        *,
+        pose_feature_indices: Sequence[int] = (20, 21, 22),
+        normalized_feature_indices: Sequence[int] | None = None,
+    ) -> None:
+        if not pose_feature_indices:
+            msg = "pose normalization requires at least one pose feature index"
+            raise ValueError(msg)
+        self._base_model = base_model
+        self._pose_feature_indices = tuple(pose_feature_indices)
+        self._configured_normalized_feature_indices = (
+            tuple(normalized_feature_indices)
+            if normalized_feature_indices is not None
+            else None
+        )
+        self._normalized_feature_indices: tuple[int, ...] = ()
+        self._pose_means: tuple[float, ...] = ()
+        self._regressors: dict[int, _FeatureRegressor] = {}
+        self._fitted = False
+
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> Any:
+        valid_samples = [sample for sample in samples if sample.observation.valid]
+        if not valid_samples:
+            msg = "pose normalization requires valid calibration samples"
+            raise ValueError(msg)
+        feature_count = len(valid_samples[0].observation.feature_vector)
+        self._validate_indices(feature_count)
+        self._normalized_feature_indices = self._resolve_normalized_feature_indices(
+            feature_count
+        )
+        pose_rows = [
+            self._pose_features(sample.observation.feature_vector)
+            for sample in valid_samples
+        ]
+        self._pose_means = tuple(
+            sum(row[index] for row in pose_rows) / len(pose_rows)
+            for index in range(len(self._pose_feature_indices))
+        )
+        self._regressors = {
+            feature_index: self._fit_feature_regressor(
+                pose_rows,
+                [
+                    sample.observation.feature_vector[feature_index]
+                    for sample in valid_samples
+                ],
+            )
+            for feature_index in self._normalized_feature_indices
+        }
+        self._fitted = True
+        return self._base_model.fit(
+            tuple(self._normalized_sample(sample) for sample in samples),
+            screen_width,
+            screen_height,
+        )
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample:
+        if not self._fitted:
+            msg = "pose-normalized model is not fitted"
+            raise RuntimeError(msg)
+        return self._base_model.predict(
+            self._normalized_observation(observation),
+            screen_width,
+            screen_height,
+        )
+
+    def _validate_indices(self, feature_count: int) -> None:
+        configured_indices = set(self._pose_feature_indices)
+        if self._configured_normalized_feature_indices is not None:
+            configured_indices.update(self._configured_normalized_feature_indices)
+        invalid_indices = [
+            index for index in configured_indices if index < 0 or index >= feature_count
+        ]
+        if invalid_indices:
+            msg = f"feature indices out of range for {feature_count} features: {invalid_indices}"
+            raise ValueError(msg)
+
+    def _resolve_normalized_feature_indices(self, feature_count: int) -> tuple[int, ...]:
+        if self._configured_normalized_feature_indices is not None:
+            return self._configured_normalized_feature_indices
+        pose_indices = set(self._pose_feature_indices)
+        return tuple(index for index in range(feature_count) if index not in pose_indices)
+
+    def _pose_features(self, feature_vector: tuple[float, ...]) -> tuple[float, ...]:
+        return tuple(feature_vector[index] for index in self._pose_feature_indices)
+
+    def _fit_feature_regressor(
+        self,
+        pose_rows: Sequence[tuple[float, ...]],
+        values: Sequence[float],
+    ) -> _FeatureRegressor:
+        from sklearn.linear_model import LinearRegression
+
+        regressor = cast(_FeatureRegressor, LinearRegression())
+        regressor.fit(pose_rows, values)
+        return regressor
+
+    def _normalized_sample(self, sample: CalibrationSample) -> CalibrationSample:
+        return CalibrationSample(
+            target=sample.target,
+            observation=self._normalized_observation(sample.observation),
+        )
+
+    def _normalized_observation(self, observation: RawObservation) -> RawObservation:
+        if not observation.feature_vector:
+            return observation
+        values = list(observation.feature_vector)
+        pose_features = self._pose_features(observation.feature_vector)
+        for feature_index, regressor in self._regressors.items():
+            prediction_at_pose = float(regressor.predict([pose_features])[0])
+            prediction_at_mean = float(regressor.predict([self._pose_means])[0])
+            values[feature_index] = (
+                observation.feature_vector[feature_index]
+                - prediction_at_pose
+                + prediction_at_mean
+            )
+        for pose_index, pose_mean in zip(
+            self._pose_feature_indices,
+            self._pose_means,
+            strict=True,
+        ):
+            values[pose_index] = pose_mean
+        return RawObservation(
+            timestamp=observation.timestamp,
+            valid=observation.valid,
+            confidence=observation.confidence,
+            face_bounds=observation.face_bounds,
+            left_iris=observation.left_iris,
+            right_iris=observation.right_iris,
+            feature_vector=tuple(values),
+            frame_width=observation.frame_width,
+            frame_height=observation.frame_height,
+            reason=observation.reason,
+        )
 
 
 class BiasCorrectedCalibrationModel:
@@ -695,7 +855,7 @@ def evaluate_replay_models(
         dataset.calibration_samples,
         window=calibration_sample_window,
     )
-    for candidate in _candidate_models():
+    for candidate in _candidate_models(dataset.feature_count):
         model = candidate.model
         weighted_calibration_samples = apply_target_weighting(
             calibration_samples,
@@ -851,7 +1011,7 @@ def _calibration_prediction_residuals(
     return tuple(residuals)
 
 
-def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
+def _candidate_models(feature_count: int) -> tuple[ReplayModelCandidate, ...]:
     linear_1 = LinearRidgeCalibrationModel(alpha=1.0)
     poly_1 = PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
     base_candidates = (
@@ -972,7 +1132,21 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
             ),
         )
     )
-    return base_candidates + weighted_candidates
+    pose_normalized_candidates: tuple[ReplayModelCandidate, ...] = ()
+    if feature_count >= 23:
+        pose_normalized_candidates = (
+            ReplayModelCandidate(
+                "linear-alpha-1.0-pose-normalized",
+                PoseNormalizedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
+            ),
+            ReplayModelCandidate(
+                "poly2-alpha-1.0-pose-normalized",
+                PoseNormalizedCalibrationModel(
+                    PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
+                ),
+            ),
+        )
+    return base_candidates + weighted_candidates + pose_normalized_candidates
 
 
 def _parse_event(line: str, *, line_number: int) -> Mapping[str, object]:
