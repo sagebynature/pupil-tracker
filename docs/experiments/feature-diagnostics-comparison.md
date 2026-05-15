@@ -542,6 +542,46 @@ Interpretation:
 
 Decision: keep the repeat-run diagnostics tool and use it after future manual runs. Next implementation should add calibration-side repeat-run diagnostics, especially per-target feature drift between `v1`/`v4` and the stable `v0` failure.
 
+## Calibration-Side Repeat-Run Feature Drift
+
+Date: 2026-05-15
+
+Extended `tools/analyze_repeat_run_diagnostics.py` to include scalar `calibration_replay_sample` summaries by target and first-vs-second feature-mean deltas. The same edge-dense line ranges were analyzed:
+
+```bash
+uv run python tools/analyze_repeat_run_diagnostics.py metrics/demo.jsonl --run 53454:59073 --run 59074:64477 --screen-width 5120 --screen-height 1440 --grid-columns 4 --grid-rows 3
+```
+
+Top calibration feature-drift targets:
+
+| Calibration target | Samples A | Samples B | Max feature mean delta | Dominant feature index / signal |
+|---|---:|---:|---:|---|
+| `bottom4` | 76 | 76 | `0.113405` | index `13`, eye-line slope / vertical agreement; index `9`, right iris eye-relative Y also moved `+0.109561` |
+| `bottom2` | 77 | 77 | `0.103482` | index `7`, left iris eye-relative Y |
+| `mid_right` | 76 | 77 | `0.096476` | index `9`, right iris eye-relative Y |
+| `top0` | 76 | 77 | `0.076690` | index `15`, face center Y |
+| `bottom3` | 77 | 76 | `0.070156` | index `15`, face center Y; index `13`, eye-line slope / vertical agreement also moved `-0.065237` |
+
+Feature-index reference for dominant signals:
+
+| Index | Feature |
+|---:|---|
+| `7` | left iris eye-relative Y |
+| `9` | right iris eye-relative Y |
+| `12` | binocular eye-relative Y midpoint |
+| `13` | left/right vertical agreement / eye-line slope proxy |
+| `15` | normalized face center Y |
+| `20` | roll proxy |
+
+Interpretation:
+
+1. Calibration sample counts are balanced across repeated runs (`76`-`77` per target), so the drift is not explained by sparse capture.
+2. The largest repeat-run movement is in eye-relative vertical geometry and face-center/head-position features, not in raw target counts or validation windowing.
+3. The stable top-left validation failure (`v0`) still shows nearly unchanged signed Y error (`-1.23 px` delta) even while the top-left calibration target `top0` has measurable face-center-Y drift. That suggests `v0` is a persistent model/geometry mismatch rather than only a between-run operator shift.
+4. The right-side validation instability (`v1` collapse, `v4` recovery) coincides with larger right/edge calibration drift (`mid_right`, `upper_right`, `bottom4`), especially feature index `9` and slope/face-center signals. That points to setup/head-pose sensitivity before another global Y correction.
+
+Decision: keep the calibration-side drift diagnostics in the repeat-run tool. Do not promote edge-dense calibration or add another global correction from these two runs. Next higher-leverage slice should make feature-drift output easier to interpret by naming feature indices in the report, then compare a fresh controlled repeat run with stricter head/camera posture.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -552,7 +592,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Repeat-run diagnostics show stable top-left collapse into `r1c0` plus unstable right-side vertical shifts (`v1` collapse, `v4` recovery). Keep the features, evaluator corrections, and repeat-run diagnostic tooling for now; do not change the default sample window, add live weighting, or promote another live model. Prioritize calibration-side repeat-run feature drift diagnostics before more geometry/model tuning.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Repeat-run diagnostics show stable top-left collapse into `r1c0` plus unstable right-side vertical shifts (`v1` collapse, `v4` recovery). Calibration-side repeat-run drift now shows balanced sample counts but material movement in eye-relative vertical, face-center-Y, and slope/roll-related signals at edge targets. Keep the features, evaluator corrections, and repeat-run diagnostic tooling for now; do not change the default sample window, add live weighting, promote edge-dense calibration, or add another global correction. Prioritize named feature-drift reporting and a fresh controlled repeat run before more geometry/model tuning.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 

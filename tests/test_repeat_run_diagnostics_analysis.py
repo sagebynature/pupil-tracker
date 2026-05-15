@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 TOOLS_ROOT = Path(__file__).resolve().parents[1] / "tools"
 if str(TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(TOOLS_ROOT))
@@ -44,6 +46,29 @@ def _validation_sample(
             "y": y,
             "confidence": 0.9,
             "valid": valid,
+        },
+    }
+
+
+def _calibration_replay_sample(
+    target_id: str,
+    *,
+    target_x: float,
+    target_y: float,
+    features: tuple[float, ...],
+    valid: bool = True,
+) -> dict[str, object]:
+    return {
+        "event_type": "calibration_replay_sample",
+        "payload": {
+            "target_id": target_id,
+            "target_x": target_x,
+            "target_y": target_y,
+            "timestamp": 1.0,
+            "valid": valid,
+            "confidence": 0.9,
+            "feature_count": len(features),
+            "features": list(features),
         },
     }
 
@@ -163,6 +188,65 @@ def test_repeat_run_diagnostics_uses_metrics_window_per_target(tmp_path: Path) -
     assert diagnostics.runs[0].targets["v1"].mean_error_px == 0.0
 
 
+def test_repeat_run_diagnostics_compare_calibration_feature_drift(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "demo.jsonl"
+    _write_jsonl(
+        log_path,
+        [
+            _calibration_replay_sample(
+                "top_left", target_x=0.1, target_y=0.1, features=(1.0, 10.0)
+            ),
+            _calibration_replay_sample(
+                "top_left", target_x=0.1, target_y=0.1, features=(3.0, 14.0)
+            ),
+            _calibration_replay_sample(
+                "top_right", target_x=0.9, target_y=0.1, features=(20.0, 20.0)
+            ),
+            _calibration_replay_sample(
+                "top_right", target_x=0.9, target_y=0.1, features=(20.0, 22.0)
+            ),
+            _calibration_replay_sample(
+                "top_left", target_x=0.1, target_y=0.1, features=(5.0, 13.0)
+            ),
+            _calibration_replay_sample(
+                "top_left", target_x=0.1, target_y=0.1, features=(7.0, 17.0)
+            ),
+            _calibration_replay_sample(
+                "top_right", target_x=0.9, target_y=0.1, features=(20.01, 20.0)
+            ),
+            _calibration_replay_sample(
+                "top_right", target_x=0.9, target_y=0.1, features=(20.01, 22.0)
+            ),
+        ],
+    )
+
+    diagnostics = analyze_repeat_run_diagnostics_log(
+        log_path,
+        run_ranges=(parse_run_range("1:4", label="run-a"), parse_run_range("5:8", label="run-b")),
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=3,
+    )
+
+    first_top_left = diagnostics.runs[0].calibration_features["top_left"]
+    assert first_top_left.accepted_count == 2
+    assert first_top_left.feature_mean == pytest.approx((2.0, 12.0))
+    assert first_top_left.feature_std == pytest.approx((1.0, 2.0))
+
+    top_left_delta = diagnostics.calibration_feature_deltas["top_left"]
+    assert top_left_delta.sample_count_delta == 0
+    assert top_left_delta.mean_delta == pytest.approx((4.0, 3.0))
+    assert top_left_delta.max_abs_mean_delta == 4.0
+    assert top_left_delta.flags == ("feature-drift",)
+
+    top_right_delta = diagnostics.calibration_feature_deltas["top_right"]
+    assert top_right_delta.mean_delta == pytest.approx((0.01, 0.0))
+    assert top_right_delta.flags == ()
+
+
 def test_repeat_run_diagnostics_report_is_markdown_and_copyable(tmp_path: Path) -> None:
     log_path = tmp_path / "demo.jsonl"
     _write_jsonl(
@@ -192,3 +276,35 @@ def test_repeat_run_diagnostics_report_is_markdown_and_copyable(tmp_path: Path) 
     assert header in report
     assert "| run-b | v0 | 1 | 88.46 px | +60.00 px | +65.00 px | 0.0% | r2c3=1 |" in report
     assert "| v0 | +65.00 px | -100.0% | grid-collapse, signed-y-shift |" in report
+
+
+def test_repeat_run_diagnostics_report_includes_calibration_feature_drift(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "demo.jsonl"
+    _write_jsonl(
+        log_path,
+        [
+            _calibration_replay_sample(
+                "top_left", target_x=0.1, target_y=0.1, features=(1.0, 10.0)
+            ),
+            _calibration_replay_sample(
+                "top_left", target_x=0.1, target_y=0.1, features=(5.0, 13.0)
+            ),
+        ],
+    )
+
+    diagnostics = analyze_repeat_run_diagnostics_log(
+        log_path,
+        run_ranges=(parse_run_range("1:1", label="run-a"), parse_run_range("2:2", label="run-b")),
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=3,
+    )
+
+    report = format_repeat_run_diagnostics_report(diagnostics)
+
+    assert "### Calibration feature drift" in report
+    assert "| Target | Samples A | Samples B | Max Mean Δ | Mean Δ | Flags |" in report
+    assert "| top_left | 1 | 1 | 4.000000 | [4.000000, 3.000000] | feature-drift |" in report

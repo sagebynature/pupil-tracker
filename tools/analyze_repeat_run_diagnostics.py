@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from math import hypot
+from math import hypot, sqrt
 from pathlib import Path
 from typing import NoReturn, cast
 
@@ -39,6 +39,18 @@ class TargetRunSummary:
 
 
 @dataclass(frozen=True)
+class CalibrationFeatureSummary:
+    """Scalar feature summary for one calibration target inside one run."""
+
+    target_id: str
+    target_x: float
+    target_y: float
+    accepted_count: int
+    feature_mean: tuple[float, ...]
+    feature_std: tuple[float, ...]
+
+
+@dataclass(frozen=True)
 class RunDiagnostics:
     """All target diagnostics for one line-bounded run."""
 
@@ -47,6 +59,7 @@ class RunDiagnostics:
     end_line: int
     sample_count: int
     targets: Mapping[str, TargetRunSummary]
+    calibration_features: Mapping[str, CalibrationFeatureSummary]
 
 
 @dataclass(frozen=True)
@@ -60,15 +73,35 @@ class TargetRunDelta:
 
 
 @dataclass(frozen=True)
+class CalibrationFeatureDelta:
+    """First-vs-second calibration feature movement for one target."""
+
+    target_id: str
+    sample_count_delta: int
+    mean_delta: tuple[float, ...]
+    max_abs_mean_delta: float
+    flags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RepeatRunDiagnostics:
     """Repeat-run diagnostics plus first-vs-second target deltas."""
 
     runs: tuple[RunDiagnostics, ...]
     target_deltas: Mapping[str, TargetRunDelta]
+    calibration_feature_deltas: Mapping[str, CalibrationFeatureDelta]
     screen_width: float
     screen_height: float
     grid_columns: int
     grid_rows: int
+
+
+@dataclass(frozen=True)
+class _CalibrationFeatureRow:
+    target_id: str
+    target_x: float
+    target_y: float
+    features: tuple[float, ...]
 
 
 @dataclass(frozen=True)
@@ -124,6 +157,7 @@ def analyze_repeat_run_diagnostics_log(
         raise ValueError(msg)
 
     run_rows: list[list[_ValidationRow]] = [[] for _ in run_ranges]
+    calibration_rows: list[list[_CalibrationFeatureRow]] = [[] for _ in run_ranges]
     metrics_windows: list[tuple[int, int, tuple[str, ...]] | None] = [None for _ in run_ranges]
     with path.open(encoding="utf-8") as log_file:
         for line_number, line in enumerate(log_file, start=1):
@@ -137,6 +171,15 @@ def analyze_repeat_run_diagnostics_log(
             event = _parse_event(line, line_number=line_number)
             event_type = event.get("event_type")
             payload = event.get("payload")
+            if event_type == "calibration_replay_sample" and isinstance(payload, Mapping):
+                row = _parse_calibration_feature_row(
+                    cast(Mapping[object, object], payload),
+                    line_number=line_number,
+                )
+                if row is not None:
+                    for index in matching_indices:
+                        calibration_rows[index].append(row)
+                continue
             if event_type == "validation_metrics" and isinstance(payload, Mapping):
                 sample_count = _as_int(
                     cast(Mapping[object, object], payload).get("sample_count"),
@@ -167,12 +210,18 @@ def analyze_repeat_run_diagnostics_log(
         for rows, metrics_window in zip(run_rows, metrics_windows, strict=True)
     )
     runs = tuple(
-        _summarize_run(run_range, rows)
-        for run_range, rows in zip(run_ranges, trimmed_run_rows, strict=True)
+        _summarize_run(run_range, validation_rows, feature_rows)
+        for run_range, validation_rows, feature_rows in zip(
+            run_ranges,
+            trimmed_run_rows,
+            calibration_rows,
+            strict=True,
+        )
     )
     return RepeatRunDiagnostics(
         runs=runs,
         target_deltas=_compare_first_two_runs(runs),
+        calibration_feature_deltas=_compare_first_two_calibration_feature_runs(runs),
         screen_width=screen_width,
         screen_height=screen_height,
         grid_columns=grid_columns,
@@ -228,6 +277,34 @@ def format_repeat_run_diagnostics_report(diagnostics: RepeatRunDiagnostics) -> s
                 f"{delta.grid_accuracy_delta:+.1%} | "
                 f"{flags} |"
             )
+    if diagnostics.calibration_feature_deltas:
+        lines.extend(
+            (
+                "",
+                "### Calibration feature drift",
+                "",
+                "| Target | Samples A | Samples B | Max Mean Δ | Mean Δ | Flags |",
+                "|---|---:|---:|---:|---|---|",
+            )
+        )
+        first_run = diagnostics.runs[0]
+        second_run = diagnostics.runs[1]
+        for delta in sorted(
+            diagnostics.calibration_feature_deltas.values(),
+            key=lambda item: (-item.max_abs_mean_delta, item.target_id),
+        ):
+            first_summary = first_run.calibration_features[delta.target_id]
+            second_summary = second_run.calibration_features[delta.target_id]
+            flags = ", ".join(delta.flags) if delta.flags else "-"
+            lines.append(
+                "| "
+                f"{delta.target_id} | "
+                f"{first_summary.accepted_count} | "
+                f"{second_summary.accepted_count} | "
+                f"{delta.max_abs_mean_delta:.6f} | "
+                f"{_format_vector(delta.mean_delta)} | "
+                f"{flags} |"
+            )
     return "\n".join(lines)
 
 
@@ -266,7 +343,11 @@ def _metrics_target_ids(payload: Mapping[object, object]) -> tuple[str, ...]:
     return ()
 
 
-def _summarize_run(run_range: RunRange, rows: Sequence[_ValidationRow]) -> RunDiagnostics:
+def _summarize_run(
+    run_range: RunRange,
+    rows: Sequence[_ValidationRow],
+    calibration_rows: Sequence[_CalibrationFeatureRow],
+) -> RunDiagnostics:
     rows_by_target: dict[str, list[_ValidationRow]] = defaultdict(list)
     for row in rows:
         rows_by_target[row.target_id].append(row)
@@ -280,6 +361,56 @@ def _summarize_run(run_range: RunRange, rows: Sequence[_ValidationRow]) -> RunDi
         end_line=run_range.end_line,
         sample_count=sum(summary.sample_count for summary in targets.values()),
         targets=targets,
+        calibration_features=_summarize_calibration_features(calibration_rows),
+    )
+
+
+def _summarize_calibration_features(
+    rows: Sequence[_CalibrationFeatureRow],
+) -> Mapping[str, CalibrationFeatureSummary]:
+    rows_by_target: dict[str, list[_CalibrationFeatureRow]] = defaultdict(list)
+    for row in rows:
+        rows_by_target[row.target_id].append(row)
+
+    summaries: dict[str, CalibrationFeatureSummary] = {}
+    for target_id, target_rows in rows_by_target.items():
+        feature_count = len(target_rows[0].features)
+        for row in target_rows:
+            if len(row.features) != feature_count:
+                msg = f"calibration target {target_id!r} has inconsistent feature lengths"
+                raise ValueError(msg)
+        feature_vectors = tuple(row.features for row in target_rows)
+        means = _feature_means(feature_vectors, feature_count)
+        summaries[target_id] = CalibrationFeatureSummary(
+            target_id=target_id,
+            target_x=target_rows[0].target_x,
+            target_y=target_rows[0].target_y,
+            accepted_count=len(target_rows),
+            feature_mean=means,
+            feature_std=_feature_std(feature_vectors, means),
+        )
+    return summaries
+
+
+def _feature_means(
+    feature_vectors: Sequence[tuple[float, ...]],
+    feature_count: int,
+) -> tuple[float, ...]:
+    count = len(feature_vectors)
+    return tuple(
+        sum(vector[index] for vector in feature_vectors) / count
+        for index in range(feature_count)
+    )
+
+
+def _feature_std(
+    feature_vectors: Sequence[tuple[float, ...]],
+    means: tuple[float, ...],
+) -> tuple[float, ...]:
+    count = len(feature_vectors)
+    return tuple(
+        sqrt(sum((vector[index] - mean) ** 2 for vector in feature_vectors) / count)
+        for index, mean in enumerate(means)
     )
 
 
@@ -338,6 +469,46 @@ def _compare_first_two_runs(
     return deltas
 
 
+def _compare_first_two_calibration_feature_runs(
+    runs: Sequence[RunDiagnostics],
+) -> Mapping[str, CalibrationFeatureDelta]:
+    if len(runs) < 2:
+        return {}
+    first, second = runs[0], runs[1]
+    shared_targets = set(first.calibration_features) & set(second.calibration_features)
+    deltas: dict[str, CalibrationFeatureDelta] = {}
+    for target_id in shared_targets:
+        first_summary = first.calibration_features[target_id]
+        second_summary = second.calibration_features[target_id]
+        mean_delta = _vector_delta(second_summary.feature_mean, first_summary.feature_mean)
+        max_abs_mean_delta = max(abs(value) for value in mean_delta) if mean_delta else 0.0
+        flags: tuple[str, ...] = (
+            ("feature-drift",) if max_abs_mean_delta >= 0.05 else ()
+        )
+        deltas[target_id] = CalibrationFeatureDelta(
+            target_id=target_id,
+            sample_count_delta=second_summary.accepted_count - first_summary.accepted_count,
+            mean_delta=mean_delta,
+            max_abs_mean_delta=max_abs_mean_delta,
+            flags=flags,
+        )
+    return deltas
+
+
+def _vector_delta(left: Sequence[float], right: Sequence[float]) -> tuple[float, ...]:
+    if len(left) != len(right):
+        msg = "feature vectors must have equal lengths"
+        raise ValueError(msg)
+    return tuple(
+        left_value - right_value
+        for left_value, right_value in zip(left, right, strict=True)
+    )
+
+
+def _format_vector(values: Sequence[float]) -> str:
+    return "[" + ", ".join(f"{value:.6f}" for value in values) + "]"
+
+
 def _target_delta_flags(
     first: TargetRunSummary,
     second: TargetRunSummary,
@@ -355,6 +526,32 @@ def _target_delta_flags(
     if abs(signed_y_delta) >= 50.0:
         flags.append("signed-y-shift")
     return tuple(flags)
+
+
+def _parse_calibration_feature_row(
+    payload: Mapping[object, object],
+    *,
+    line_number: int,
+) -> _CalibrationFeatureRow | None:
+    if not _as_bool(payload.get("valid"), field="valid", line_number=line_number):
+        return None
+    features = _parse_features(payload.get("features"), line_number=line_number)
+    feature_count = _as_int(
+        payload.get("feature_count"),
+        field="feature_count",
+        line_number=line_number,
+    )
+    if len(features) != feature_count:
+        msg = f"line {line_number}: feature_count does not match features length"
+        raise ValueError(msg)
+    if not features:
+        return None
+    return _CalibrationFeatureRow(
+        target_id=_as_str(payload.get("target_id"), field="target_id", line_number=line_number),
+        target_x=_as_float(payload.get("target_x"), field="target_x", line_number=line_number),
+        target_y=_as_float(payload.get("target_y"), field="target_y", line_number=line_number),
+        features=features,
+    )
 
 
 def _parse_validation_row(
@@ -409,6 +606,15 @@ def _parse_validation_row(
         error_px=hypot(dx, dy),
         matches_target_cell=target_cell == predicted_cell,
         predicted_cell=predicted_cell,
+    )
+
+
+def _parse_features(value: object, *, line_number: int) -> tuple[float, ...]:
+    if not isinstance(value, Iterable) or isinstance(value, str | bytes):
+        msg = f"line {line_number}: features must be a list of numbers"
+        raise ValueError(msg)
+    return tuple(
+        _as_float(item, field="features", line_number=line_number) for item in value
     )
 
 
