@@ -931,7 +931,50 @@ Compared against the previous decision-aware edge-dense run (`110622:115687`), t
 
 Replay-only evaluator on the isolated top-row run ranked `linear-alpha-1.0-vertical-bias-corrected` first by grid objective at `52.2%`, effectively matching live grid accuracy but with much worse pixel error (`528.90 px`) and a `retry` recommendation. That is not a promotion candidate; it confirms only that replay grid scoring sees the same practical ceiling.
 
-Decision: keep top-row focus as an experimental manual path. It is the best live grid result so far, but `v0` remains `0.0%` and still collapses into the second row, so do not change the default 9-point calibration or live model. Next slice should explain why the top-left held-out region remains non-separable even after local geometry: inspect scalar feature separability for the top-left cluster versus `v0`, or add a stronger head-pose/geometry diagnostic before another calibration pattern.
+Decision: keep top-row focus as an experimental manual path. It is the best live grid result so far, but `v0` remains `0.0%` and still collapses into the second row, so do not change the default 9-point calibration or live model. Next slice should explain why the top-left held-out region remains mis-mapped even after local geometry: inspect scalar feature separability for the top-left cluster versus `v0`, or add a stronger head-pose/geometry diagnostic before another calibration pattern.
+
+## Top-Left Separability Diagnostic
+
+Date: 2026-05-15
+
+Command:
+
+```bash
+uv run python tools/analyze_top_left_separability.py metrics/demo.jsonl \
+  --run 115925:126151 \
+  --screen-width 5120 \
+  --screen-height 1440 \
+  --grid-columns 4 \
+  --grid-rows 3
+```
+
+The diagnostic compares accepted scalar `calibration_replay_sample` rows inside the top-left local cluster around `(0.25, 0.25)` against the accepted `v0` validation replay window selected by the latest `validation_metrics` event.
+
+| Metric | Value |
+|---|---:|
+| Top-left calibration cluster samples | `456` |
+| Calibration targets | `tl_*` 3x3 cluster |
+| `v0` validation samples | `38` |
+| `v0` validation grid accuracy | `0.0%` |
+| `v0` predicted cells | `r1c1=23`, `r1c0=15` |
+| Separability assessment | `separable` |
+
+Dominant signed feature shifts from the calibration cluster to `v0` validation:
+
+| Feature | Calibration Mean | Validation Mean | Signed Δ | Normalized Δ |
+|---|---:|---:|---:|---:|
+| `18` face aspect ratio | `0.868917` | `0.887134` | `+0.018216` | `+3.10` |
+| `22` pitch proxy | `0.267912` | `0.287717` | `+0.019805` | `+2.90` |
+| `16` face width | `0.232940` | `0.237135` | `+0.004195` | `+2.56` |
+| `15` face center Y | `0.511070` | `0.530978` | `+0.019907` | `+2.52` |
+| `21` yaw proxy | `0.097451` | `0.063445` | `-0.034006` | `-2.40` |
+| `19` interocular distance | `0.097223` | `0.101460` | `+0.004237` | `+2.17` |
+| `20` roll proxy | `-0.067229` | `-0.036458` | `+0.030771` | `+1.61` |
+| `12` eye-relative Y midpoint | `0.382197` | `0.426951` | `+0.044754` | `+1.46` |
+
+Interpretation: the top-left held-out failure is not because scalar features are completely overlapping. The largest separation is dominated by face geometry and cheap pose proxies, especially aspect ratio, pitch proxy, face width/center Y, yaw proxy, and interocular distance. That points away from adding another calibration target pattern and toward model/geometry handling: the current linear live model is not using these separable posture/geometry shifts to keep `v0` in the top row.
+
+Decision: keep top-row focus opt-in. Do not add more calibration geometry next. The next implementation slice should be evaluator-only: either test local/top-left-aware model candidates that can use the separable scalar signal without moving `v3`/`v4`, or add stronger head-pose features such as solvePnP-style scalar pose before live promotion.
 
 ## Decision Gate
 
