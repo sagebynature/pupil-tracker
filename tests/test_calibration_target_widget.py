@@ -28,66 +28,72 @@ def qt_app() -> Iterator[QApplication]:
     yield cast(QApplication, app)
 
 
-def test_calibration_view_exposes_current_target_position(qt_app: QApplication) -> None:
-    from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
+def test_calibration_view_exposes_current_target_position_without_embedded_target_panel(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.calibration_view import (
+        CalibrationFlowState,
+        CalibrationTargetWidget,
+        CalibrationView,
+    )
 
     flow = CalibrationFlowState(samples_per_target=1)
     view = CalibrationView(flow=flow)
 
     assert view.current_target_position() == (0.1, 0.1)
+    assert view.findChildren(CalibrationTargetWidget) == []
     view.close()
     qt_app.processEvents()
 
 
 def test_target_widget_maps_normalized_target_to_widget_pixels(qt_app: QApplication) -> None:
-    from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
+    from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationTargetWidget
 
-    view = CalibrationView(flow=CalibrationFlowState(samples_per_target=1))
-    view.target_widget.resize(400, 300)
+    target_widget = CalibrationTargetWidget(CalibrationFlowState(samples_per_target=1))
+    target_widget.resize(400, 300)
 
-    assert view.target_widget.current_target_position() == (0.1, 0.1)
-    assert view.target_widget.current_target_pixel() == (40, 30)
-    view.close()
+    assert target_widget.current_target_position() == (0.1, 0.1)
+    assert target_widget.current_target_pixel() == (40, 30)
+    target_widget.close()
     qt_app.processEvents()
 
 
 def test_target_widget_updates_after_flow_advances(qt_app: QApplication) -> None:
-    from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
+    from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationTargetWidget
     from pupil_tracker.models import RawObservation
 
     flow = CalibrationFlowState(samples_per_target=1)
-    view = CalibrationView(flow=flow)
-    view.target_widget.resize(400, 300)
+    target_widget = CalibrationTargetWidget(flow)
+    target_widget.resize(400, 300)
 
     assert flow.capture_observation(
         RawObservation(timestamp=1.0, valid=True, confidence=0.9, feature_vector=(0.1, 0.2))
     )
-    view.refresh()
 
-    assert view.current_target_position() == (0.5, 0.1)
-    assert view.target_widget.current_target_pixel() == (200, 30)
-    view.close()
+    assert target_widget.current_target_position() == (0.5, 0.1)
+    assert target_widget.current_target_pixel() == (200, 30)
+    target_widget.close()
     qt_app.processEvents()
 
 
 def test_target_widget_render_marks_target_pixels(qt_app: QApplication) -> None:
-    from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationView
+    from desktop_demo.ui.calibration_view import CalibrationFlowState, CalibrationTargetWidget
 
-    view = CalibrationView(flow=CalibrationFlowState(samples_per_target=1))
-    view.target_widget.resize(200, 200)
+    target_widget = CalibrationTargetWidget(CalibrationFlowState(samples_per_target=1))
+    target_widget.resize(200, 200)
 
-    image = QImage(view.target_widget.size(), QImage.Format.Format_RGB32)
+    image = QImage(target_widget.size(), QImage.Format.Format_RGB32)
     image.fill(0)
-    view.target_widget.render(image)
+    target_widget.render(image)
 
-    target_pixel = view.target_widget.current_target_pixel()
+    target_pixel = target_widget.current_target_pixel()
     assert target_pixel is not None
     x, y = target_pixel
     target_pixel_color = image.pixelColor(x, y)
     background_pixel = image.pixelColor(199, 199)
 
     assert target_pixel_color != background_pixel
-    view.close()
+    target_widget.close()
     qt_app.processEvents()
 
 

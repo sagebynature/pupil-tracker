@@ -168,7 +168,7 @@ class CalibrationTargetWidget(QWidget):
 
 
 class CalibrationView(QWidget):
-    """Simple calibration UI placeholder backed by CalibrationFlowState."""
+    """Calibration controls and status backed by CalibrationFlowState."""
 
     def __init__(self, flow: CalibrationFlowState | None = None) -> None:
         super().__init__()
@@ -176,7 +176,6 @@ class CalibrationView(QWidget):
         self.title_label = QLabel("9-point calibration")
         self.target_label = QLabel()
         self.status_label = QLabel()
-        self.target_widget = CalibrationTargetWidget(self.flow)
         self.start_button = QPushButton("Start Calibration")
         self.vertical_calibration_button = QPushButton("Start Linear Vertical Calibration")
         self.edge_dense_calibration_button = QPushButton("Start Edge-Dense Calibration")
@@ -193,7 +192,6 @@ class CalibrationView(QWidget):
         layout.addWidget(self.title_label)
         layout.addWidget(self.target_label)
         layout.addWidget(self.status_label)
-        layout.addWidget(self.target_widget)
         layout.addWidget(self.start_button)
         layout.addWidget(self.vertical_calibration_button)
         layout.addWidget(self.edge_dense_calibration_button)
@@ -207,14 +205,16 @@ class CalibrationView(QWidget):
         """Replace the active calibration flow and refresh dependent widgets."""
 
         self.flow = flow
-        self.target_widget.flow = flow
         self.title_label.setText(title)
         self.refresh()
 
     def current_target_position(self) -> tuple[float, float] | None:
         """Return the active target as normalized widget coordinates."""
 
-        return self.target_widget.current_target_position()
+        target = self.flow.current_target
+        if target is None:
+            return None
+        return (target.x, target.y)
 
     def refresh(self) -> None:
         """Refresh labels from the current flow state."""
@@ -223,7 +223,6 @@ class CalibrationView(QWidget):
         if target is None:
             self.target_label.setText("Calibration complete")
             self.status_label.setText(f"Collected samples: {len(self.flow.all_samples())}")
-            self.target_widget.update()
             return
 
         self.target_label.setText(
@@ -234,7 +233,6 @@ class CalibrationView(QWidget):
         self.status_label.setText(
             f"Samples: {sample_count}/{self.flow.samples_per_target}"
         )
-        self.target_widget.update()
 
     def show_quality_progress(
         self,
@@ -258,7 +256,6 @@ class CalibrationView(QWidget):
             else:
                 lines.append("Quality: good")
         self.status_label.setText("\n".join(lines))
-        self.target_widget.update()
 
     @staticmethod
     def _phase_message(*, phase: CalibrationPhase, progress: float) -> str:
