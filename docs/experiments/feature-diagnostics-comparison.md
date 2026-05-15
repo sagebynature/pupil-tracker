@@ -286,6 +286,46 @@ Interpretation:
 4. The best offline grid model for this run (`early` + `linear-alpha-0.1`, `43.3%`) still has retry-level error and severe top-row vertical bias, so it should not be promoted as-is.
 5. Next implementation should test target weighting or geometry changes that penalize top/bottom residuals, while keeping the default live sample window as `all`.
 
+## Replay Target Weighting Analysis
+
+Date: 2026-05-15
+
+The replay evaluator now includes evaluator-only weighted candidates. Weighting duplicates selected calibration samples before model fit; telemetry payloads and live calibration behavior are unchanged. Policies tested:
+
+- `vertical_edges`: top/bottom targets weighted 3x.
+- `screen_edges`: top/bottom/left/right targets weighted 3x.
+- `corners`: corner targets weighted 3x.
+
+Latest-run results, isolated to lines `48430`-`53453`:
+
+| Calibration Window | Best Overall Model | Overall Grid | Best Weighted Model | Weighted Grid | Weighted Mean Error | Weighted Signed Y |
+|---|---|---:|---|---:|---:|---:|
+| `all` | `linear-alpha-0.1` | 40.1% | `linear-alpha-0.1-weight-vertical_edges` | 34.8% | 279.02 px | +183.48 px |
+| `early` | `poly2-alpha-1.0-weight-screen_edges` | 44.5% | `poly2-alpha-1.0-weight-screen_edges` | 44.5% | 263.70 px | +171.94 px |
+| `middle` | `poly2-alpha-1.0-weight-corners` | 31.7% | `poly2-alpha-1.0-weight-corners` | 31.7% | 244.26 px | +87.12 px |
+| `late` | `poly2-alpha-1.0-weight-vertical_edges` | 30.1% | `poly2-alpha-1.0-weight-vertical_edges` | 30.1% | 239.58 px | +90.59 px |
+
+Best weighted candidate was `early` + `poly2-alpha-1.0-weight-screen_edges` at `44.5%` grid accuracy. It beats the unweighted early replay candidate (`43.3%`) and the previous live baseline (`40.0%`) on grid accuracy, but it is still a retry-level model with high pixel error and severe top-row vertical bias.
+
+Validation residuals for `early` + `poly2-alpha-1.0-weight-screen_edges`:
+
+| Target | Mean Error | Signed X | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|---:|
+| `v0` | 438.02 px | +112.28 px | +415.65 px | 0.0% |
+| `v1` | 340.96 px | -34.54 px | +270.60 px | 0.0% |
+| `v2` | 198.43 px | +96.80 px | +145.01 px | 57.8% |
+| `v4` | 182.35 px | -6.22 px | +12.15 px | 78.1% |
+| `v3` | 159.94 px | +153.36 px | +17.86 px | 85.9% |
+
+Interpretation:
+
+1. Weighting can move grid accuracy slightly in replay, but the best weighted result wins by shifting errors rather than solving the mapping.
+2. The top validation row remains unusable: `v0` and `v1` both have `0.0%` grid accuracy and very large positive signed Y error.
+3. Weighted screen-edge fitting improves lower validation targets (`v3`, `v4`) but worsens the top row, so it should not be promoted to live calibration.
+4. The next higher-leverage change is calibration/validation geometry or explicit vertical-bias correction, not stronger edge weighting.
+
+Decision: keep weighted candidates in the replay evaluator for comparison, but do not expose a live weighting config yet and do not change live defaults.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -296,7 +336,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Keep the features and evaluator corrections for now; do not change the default sample window or live model until target weighting or geometry changes beat the current baseline in replay and then live validation.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model until geometry or vertical-bias changes beat the current baseline in replay and then live validation.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 

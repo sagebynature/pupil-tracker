@@ -162,7 +162,7 @@ After a fresh logged calibration and validation run, compare calibration model v
 uv run python tools/evaluate_calibration_models.py metrics/demo.jsonl --screen-width 1512 --screen-height 982 --grid-columns 4 --grid-rows 3 --objective grid --calibration-sample-window middle
 ```
 
-Use the same screen dimensions as the manual run. The evaluator uses only `calibration_replay_sample` and `validation_replay_sample` scalar payloads, so it can compare candidate models without saving frames or re-running the camera session. Use `--calibration-sample-window all|early|middle|late` to test whether target-capture timing affects the model fit. Add `--include-target-residuals` when a run regresses to append per-target calibration and validation residual tables for the top-ranked model.
+Use the same screen dimensions as the manual run. The evaluator uses only `calibration_replay_sample` and `validation_replay_sample` scalar payloads, so it can compare candidate models without saving frames or re-running the camera session. Use `--calibration-sample-window all|early|middle|late` to test whether target-capture timing affects the model fit. The evaluator also includes target-weighted candidates for vertical edges, screen edges, and corners; these are replay-only comparisons, not live behavior. Add `--include-target-residuals` when a run regresses to append per-target calibration and validation residual tables for the top-ranked model.
 
 To validate the live late-sample policy without changing the default, launch the demo with:
 
