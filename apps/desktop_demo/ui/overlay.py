@@ -173,6 +173,11 @@ class ValidationOverlayState:
             )
         return self.current
 
+    def clear(self) -> None:
+        """Clear stale validation drawing so normal gaze feedback can render."""
+
+        self.current = None
+
 
 class GazeOverlay(QWidget):
     """Transparent click-through overlay for drawing gaze cursor state."""
@@ -197,6 +202,7 @@ class GazeOverlay(QWidget):
     def update_sample(self, sample: GazeSample) -> None:
         """Update overlay drawing state from a gaze sample."""
 
+        self.validation_state.clear()
         self.state.update(sample)
         if self.heatmap_enabled:
             self.heatmap.add(sample)

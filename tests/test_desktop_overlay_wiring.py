@@ -208,6 +208,31 @@ def test_window_candidate_draws_red_border_state(qt_app: QApplication) -> None:
     qt_app.processEvents()
 
 
+def test_window_candidate_clears_stale_validation_overlay_for_red_border(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    candidate = visible_window()
+    window = MainWindow(
+        camera_factory=FakeCamera,
+        window_provider=lambda: (candidate,),
+    )
+    window.gaze_overlay.update_validation_sample(
+        target=ValidationTarget(id="v0", x=0.25, y=0.25),
+        sample=valid_sample(),
+        screen_width=400.0,
+        screen_height=400.0,
+    )
+
+    window.handle_gaze_sample(valid_sample())
+
+    assert window.gaze_overlay.validation_state.current is None
+    assert window.gaze_overlay.highlighted_window == candidate
+    window.close()
+    qt_app.processEvents()
+
+
 def test_missing_window_candidate_clears_red_border_state(qt_app: QApplication) -> None:
     from desktop_demo.ui.main_window import MainWindow
 
