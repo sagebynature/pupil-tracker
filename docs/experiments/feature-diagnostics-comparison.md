@@ -187,7 +187,7 @@ Interpretation:
 2. `middle` and `late` windows beat the latest live validation grid result (`40.0%`) by a small margin: `40.9%` and `42.2%` respectively.
 3. The winning grid model in both cases is `poly2-alpha-1.0-affine-corrected`, but `late` is marked `retry` because mean error remains above the recommendation threshold.
 4. The gain is real enough to justify a live-calibration sampling slice, but not strong enough to treat the current model as dependable.
-5. Next implementation candidate: fit the live model from the late third of accepted samples per target, or expose a replay-backed calibration sample policy behind a small config seam before changing the default.
+5. Next implementation candidate: run a fresh live manual validation with `PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=late`. The implementation now supports the policy behind config, while the default remains `all` until live evidence confirms it.
 
 ## Decision Gate
 
@@ -199,7 +199,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay now shows corrected candidates can improve over their base models, and sample-window replay shows middle/late calibration samples can slightly beat the latest live grid result. Keep the features and evaluator corrections for now; the next live slice should test a replay-backed calibration sample policy before treating the build as dependable for window selection.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay now shows corrected candidates can improve over their base models, and sample-window replay shows middle/late calibration samples can slightly beat the latest live grid result. Keep the features and evaluator corrections for now; the next manual gate is a late-window live calibration run before treating the build as dependable for window selection.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 

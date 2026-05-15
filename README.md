@@ -164,6 +164,14 @@ uv run python tools/evaluate_calibration_models.py metrics/demo.jsonl --screen-w
 
 Use the same screen dimensions as the manual run. The evaluator uses only `calibration_replay_sample` and `validation_replay_sample` scalar payloads, so it can compare candidate models without saving frames or re-running the camera session. Use `--calibration-sample-window all|early|middle|late` to test whether target-capture timing affects the model fit.
 
+To validate the live late-sample policy without changing the default, launch the demo with:
+
+```bash
+PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=late PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo
+```
+
+The default live calibration sample window remains `all`; use `late` only for replay-backed manual validation until a fresh run confirms it improves practical grid/window selection.
+
 Any future video/frame capture feature must be explicit opt-in and documented separately.
 
 ## Known MVP Limitations

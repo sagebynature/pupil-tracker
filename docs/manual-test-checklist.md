@@ -127,6 +127,9 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 - [ ] Overlap windows and confirm the frontmost/visible candidate is preferred.
 - [ ] Confirm no app is focused, raised, clicked, or activated by gaze.
 
+- [ ] For replay-backed late-window validation, launch with `PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=late PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
+- [ ] Keep the default `PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=all` unless the late-window manual run improves practical grid/window selection.
+
 ## Telemetry Privacy
 
 - [ ] Confirm `metrics/` is ignored by git.
