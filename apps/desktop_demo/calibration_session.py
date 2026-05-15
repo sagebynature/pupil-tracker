@@ -11,6 +11,7 @@ from pupil_tracker.calibration import (
     CalibrationFitResult,
     CalibrationPhase,
     CalibrationQualityFilter,
+    CalibrationSampleDecision,
     TargetQualitySummary,
     TimedCalibrationConfig,
     TimedTargetState,
@@ -167,6 +168,7 @@ class CalibrationSession:
         self._target_timing_state: TimedTargetState | None = None
         self.phase = CalibrationPhase.COMPLETE
         self.target_quality: TargetQualitySummary | None = None
+        self.last_capture_decision: CalibrationSampleDecision | None = None
         self.accepted_for_current_target = 0
         self.rejected_for_current_target = 0
         self.capture_progress = 0.0
@@ -191,6 +193,7 @@ class CalibrationSession:
         self.error_message = None
         self.state = CalibrationSessionState.COLLECTING
         self.target_quality = None
+        self.last_capture_decision = None
         if self._target_timer is not None:
             self._restart_timed_target(clear_quality=True)
         else:
@@ -207,6 +210,7 @@ class CalibrationSession:
         """
 
         if self.state is not CalibrationSessionState.COLLECTING:
+            self.last_capture_decision = None
             return False
 
         if self._target_timer is not None:
@@ -230,10 +234,13 @@ class CalibrationSession:
 
         self._update_timed_state()
         if self.phase is CalibrationPhase.SETTLING:
+            self.last_capture_decision = None
             return False
         if self.phase is CalibrationPhase.REVIEWING:
+            self.last_capture_decision = None
             return self._review_timed_target()
         if self.phase is not CalibrationPhase.CAPTURING:
+            self.last_capture_decision = None
             return False
 
         quality_filter = self.quality_filter
@@ -247,6 +254,7 @@ class CalibrationSession:
             observation,
             reference_features=reference_features,
         )
+        self.last_capture_decision = decision
         if decision.accepted and self.flow.add_current_target_sample(observation):
             self.accepted_for_current_target += 1
         else:

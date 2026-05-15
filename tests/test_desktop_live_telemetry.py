@@ -262,8 +262,69 @@ def test_live_calibration_logs_progress_without_frame_payload(
         "confidence": 0.8,
         "feature_count": 2,
         "features": [0.1, 0.2],
+        "capture_phase": "complete",
+        "sample_accepted": True,
+        "decision_reason": "accepted",
     }
     assert "image" not in json.dumps(events)
+    window.close()
+    qt_app.processEvents()
+
+
+def test_timed_calibration_replay_marks_settle_and_accepted_samples(
+    qt_app: QApplication,
+    tmp_path: Path,
+) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+    from desktop_demo.ui.main_window import MainWindow
+    from pupil_tracker.calibration import CalibrationQualityFilter
+
+    clock = FakeClock()
+    log_path = tmp_path / "demo.jsonl"
+    session = CalibrationSession(
+        flow=CalibrationFlowState(samples_per_target=3),
+        model=FakeModel(),
+        screen_width=100.0,
+        screen_height=100.0,
+        timing_config=TimedCalibrationConfig(
+            settle_seconds=1.0,
+            capture_seconds=1.0,
+            min_samples_per_target=1,
+        ),
+        clock=clock,
+        quality_filter=CalibrationQualityFilter(min_confidence=0.0),
+    )
+    window = MainWindow(
+        telemetry_path=log_path,
+        camera_factory=FakeCamera,
+        tracking_runtime=FakeTrackingRuntime(valid_observation()),
+        calibration_session=session,
+        window_provider=lambda: (),
+    )
+    window.start_camera()
+    window.start_logging()
+    window.start_calibration()
+
+    window.update_preview_frame()
+    clock.advance(1.0)
+    window.update_preview_frame()
+    window.stop_logging()
+
+    replay_events = [
+        event for event in read_events(log_path)
+        if event["event_type"] == "calibration_replay_sample"
+    ]
+    settle_payload = cast(dict[str, object], replay_events[0]["payload"])
+    accepted_payload = cast(dict[str, object], replay_events[1]["payload"])
+    assert settle_payload["capture_phase"] == "settling"
+    assert settle_payload["sample_accepted"] is False
+    assert settle_payload["decision_reason"] == "not_evaluated"
+    assert accepted_payload["capture_phase"] == "capturing"
+    assert accepted_payload["sample_accepted"] is True
+    assert accepted_payload["decision_reason"] == "accepted"
+    assert "image" not in json.dumps(replay_events)
+    assert "feature_vector" not in json.dumps(replay_events)
     window.close()
     qt_app.processEvents()
 

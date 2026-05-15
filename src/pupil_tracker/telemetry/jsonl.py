@@ -138,10 +138,21 @@ def calibration_event_payload(
 def calibration_replay_sample_payload(
     target: CalibrationTarget,
     observation: RawObservation,
+    *,
+    capture_phase: str | None = None,
+    sample_accepted: bool | None = None,
+    decision_reason: str | None = None,
 ) -> dict[str, Any]:
     """Serialize one scalar calibration sample for offline replay."""
 
-    return _replay_sample_payload(target, observation)
+    payload = _replay_sample_payload(target, observation)
+    if capture_phase is not None:
+        payload["capture_phase"] = capture_phase
+    if sample_accepted is not None:
+        payload["sample_accepted"] = sample_accepted
+    if decision_reason is not None:
+        payload["decision_reason"] = decision_reason
+    return payload
 
 
 def validation_replay_sample_payload(

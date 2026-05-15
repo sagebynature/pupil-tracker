@@ -607,20 +607,33 @@ class MainWindow(QMainWindow):
 
         if self.calibration_session.is_collecting:
             target = self.calibration_session.flow.current_target
+            sample_count_before_capture = len(self.calibration_session.flow.all_samples())
             advanced = self.calibration_session.capture(status.observation)
+            sample_count_after_capture = len(self.calibration_session.flow.all_samples())
+            sample_accepted = sample_count_after_capture > sample_count_before_capture
+            decision = self.calibration_session.last_capture_decision
+            decision_reason = (
+                decision.reason
+                if decision is not None
+                else "accepted" if sample_accepted else "not_evaluated"
+            )
             if target is not None and status.valid:
                 self.log_telemetry_event(
                     "calibration_sample",
                     calibration_event_payload(
                         target,
-                        sample_count=len(
-                            self.calibration_session.flow.all_samples()
-                        ),
+                        sample_count=sample_count_after_capture,
                     ),
                 )
                 self.log_telemetry_event(
                     "calibration_replay_sample",
-                    calibration_replay_sample_payload(target, status.observation),
+                    calibration_replay_sample_payload(
+                        target,
+                        status.observation,
+                        capture_phase=self.calibration_session.phase.value,
+                        sample_accepted=sample_accepted,
+                        decision_reason=decision_reason,
+                    ),
                 )
             if advanced:
                 self._log_calibration_quality_events()

@@ -741,6 +741,44 @@ Interpretation:
 
 Decision: do not promote the posture gate threshold or edge-dense calibration. Keep the gate opt-in. Next controlled posture experiment should use a stricter threshold, likely `0.05` first; calibration starts now emit a scalar `calibration_config` event so the active path/window/model/threshold can be verified from the log before analysis.
 
+## Posture Stability Gate Run 2 Analysis
+
+Date: 2026-05-15
+
+Run range: `105352:110399`; calibration config line: `105352`; validation metrics line: `110399`.
+
+The run used `calibration_path: edge_dense`, `calibration_sample_window: all`, `LinearRidgeCalibrationModel`, and `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05` as confirmed by the new `calibration_config` event.
+
+Live validation metric summary:
+
+| Metric | Third Edge-Dense Baseline | Posture Gate 0.08 | Posture Gate 0.05 |
+|---|---:|---:|---:|
+| Sample count | `190` | `190` | `190` |
+| Mean error | `221.95 px` | `149.08 px` | `260.53 px` |
+| Median error | `237.66 px` | `148.17 px` | `252.29 px` |
+| Max error | `499.99 px` | `383.98 px` | `962.99 px` |
+| Mean X error | `143.69 px` | `57.92 px` | `145.07 px` |
+| Mean Y error | `138.07 px` | `120.96 px` | `186.41 px` |
+| Signed Y bias | `-33.76 px` | `-46.62 px` | `-28.39 px` |
+| 4x3 grid accuracy | `42.1%` | `34.7%` | `36.8%` |
+| Recommendation | `retry` | `usable` | `retry` |
+
+Per-target validation behavior for the `0.05` run:
+
+| Target | Mean Error | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|
+| `v0` | `387.72 px` | `+304.82 px` | `0.0%` |
+| `v1` | `254.32 px` | `+52.84 px` | `94.7%` |
+| `v2` | `80.52 px` | `+37.13 px` | `81.6%` |
+| `v3` | `161.18 px` | `-155.50 px` | `7.9%` |
+| `v4` | `418.92 px` | `-381.23 px` | `0.0%` |
+
+Calibration quality events again reported all 17 targets advanced with `rejected_count: 0`. This makes the `0.05` run a failed gate experiment: the active config was correct, but the capture path still did not reject any accepted calibration samples, and the validation metrics regressed versus the edge-dense baseline.
+
+One telemetry caveat surfaced during analysis: `calibration_replay_sample` currently includes valid observations logged during settle/capture flow, not just accepted calibration samples. After this run, live telemetry was extended so future `calibration_replay_sample` events include scalar capture-decision fields: `capture_phase`, `sample_accepted`, and `decision_reason`. This should make the next posture-gate run directly auditable without inferring accepted/rejected status from aggregate target quality alone.
+
+Decision: do not promote `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05`. Do not ask for another manual run until the decision-aware telemetry build has passed automated checks and been launched; the next validation should confirm whether any future threshold actually rejects capture samples before judging grid accuracy.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
