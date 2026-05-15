@@ -400,6 +400,55 @@ Interpretation:
 
 Decision: keep per-band candidates in the replay evaluator for comparison, but do not expose live config and do not change live defaults.
 
+## Edge-Dense Live Validation
+
+Date: 2026-05-15
+
+A fresh logged run used the new 17-point edge-dense calibration path. The run spans lines `53454`-`59073` and includes `1300` calibration replay samples across targets `top0`-`top4`, `upper_left`, `upper_right`, `mid_left`, `mid_center`, `mid_right`, `lower_left`, `lower_right`, and `bottom0`-`bottom4`, plus `320` validation replay samples.
+
+Live validation metrics:
+
+| Metric | Result |
+|---|---:|
+| Sample count | `190` |
+| Mean error | `181.13 px` |
+| Median error | `129.06 px` |
+| Max error | `518.95 px` |
+| Mean X error | `88.46 px` |
+| Mean Y error | `148.50 px` |
+| Signed Y bias | `+17.53 px` |
+| 4x3 grid accuracy | `41.6%` |
+| Recommendation | `usable` |
+
+Per-target validation behavior:
+
+| Target | Mean Error | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|
+| `v0` | `393.62 px` | `+357.71 px` | `0.0%` |
+| `v1` | `61.13 px` | `+39.73 px` | `100.0%` |
+| `v2` | `78.35 px` | `-2.32 px` | `89.5%` |
+| `v3` | `120.51 px` | `-118.37 px` | `18.4%` |
+| `v4` | `252.05 px` | `-189.11 px` | `0.0%` |
+
+Replay evaluation of the same run shows the strongest offline signal from the `middle` calibration sample window:
+
+| Calibration Window | Best Grid Candidate | Grid Accuracy | Mean Error | Recommendation |
+|---|---|---:|---:|---|
+| `all` | `poly2-alpha-10.0-vertical-bias-corrected` | `31.2%` | `197.18 px` | `usable` |
+| `early` | `poly2-alpha-10.0-vertical-bias-corrected` | `17.5%` | `228.46 px` | `retry` |
+| `middle` | `poly2-alpha-10.0-vertical-bias-corrected` | `46.6%` | `209.65 px` | `retry` |
+| `late` | `poly2-alpha-10.0-vertical-bias-corrected` | `33.1%` | `223.52 px` | `retry` |
+
+Interpretation:
+
+1. Edge-dense live calibration improved over the latest late-window live run (`30.0%` grid, `296.41 px`) and slightly exceeded the previous best live grid run (`40.0%`). It also improved live mean error to `181.13 px`, reaching `usable`.
+2. The gain is not broad enough to promote edge-dense calibration as the default. `v0` and `v4` remain `0.0%` grid accuracy, and `v3` is weak at `18.4%`.
+3. The top-right validation target (`v1`) improved strongly, while top-left (`v0`) remains the dominant failure. The remaining issue is asymmetric corner/edge behavior rather than generic top-row coverage.
+4. Middle-window replay is promising (`46.6%` grid), but the best replay candidate still has retry-level mean error and leaves `v0`/`v4` at `0.0%` in target residuals.
+5. Next step should be a second logged edge-dense run to confirm reproducibility before another code change. If the same asymmetric `v0`/`v4` pattern repeats, the next implementation slice should test asymmetric geometry or target-specific diagnostics rather than another global correction wrapper.
+
+Decision: keep Start Edge-Dense Calibration as an experimental option. Do not change the default 9-point calibration path, default sample window, or live model/correction policy yet.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -410,7 +459,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model until calibration geometry changes beat the current baseline in replay and then live validation.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`, so the geometry change is promising but not default-ready. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model until calibration geometry changes beat the current baseline reproducibly in live validation.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
