@@ -1028,6 +1028,68 @@ Appended feature slice:
 
 This is not a default-calibration promotion signal by itself. The next evidence step is a fresh manual top-row focus run that captures the 29-feature replay samples, followed by the same scalar separability and replay-model comparisons. Gate: improve `v0` without moving the failure into `v3`/`v4`, and do not promote any live/default behavior until replay and manual validation agree.
 
+## Post-SolvePnP Top-Row Focus Validation
+
+Date: 2026-05-15
+
+Manual top-row focus run with the 29-feature scalar pose vector:
+
+```bash
+# run range
+metrics/demo.jsonl 126383:135157
+
+uv run python tools/analyze_top_left_separability.py \
+  metrics/demo.jsonl \
+  --run 126383:135157 \
+  --screen-width 5120 \
+  --screen-height 1440 \
+  --grid-columns 4 \
+  --grid-rows 3
+```
+
+Live validation metrics regressed versus the previous top-row focus run (`115925:126151`):
+
+| Metric | Previous Top-Row Focus | 29-Feature Top-Row Focus |
+|---|---:|---:|
+| Mean error | `168.03 px` | `183.72 px` |
+| Mean abs Y error | `89.15 px` | `165.92 px` |
+| Signed Y bias | `+62.35 px` | `-51.03 px` |
+| 4x3 grid accuracy | `52.1%` | `27.4%` |
+| Recommendation | `usable` | `usable` |
+
+Target-level grid accuracy:
+
+| Target | Previous | 29-Feature Run | Decision |
+|---|---:|---:|---|
+| `v0` | `0.0%` | `0.0%` | unchanged hard failure |
+| `v1` | `63.2%` | `55.3%` | regressed |
+| `v2` | `100.0%` | `81.6%` | regressed |
+| `v3` | `31.6%` | `0.0%` | regressed to hard failure |
+| `v4` | `65.8%` | `0.0%` | regressed to hard failure |
+
+The latest `v0` samples remain scalar-separable from the top-left calibration cluster, but the failure moved laterally and still missed the expected top-row cell:
+
+```text
+validation_grid_accuracy: 0.0%
+validation_predicted_cells: r1c0=25, r0c0=11, r1c1=2
+assessment: separable
+```
+
+Dominant separability features now include the new pose-geometry suffix:
+
+| Feature | Normalized Δ |
+|---|---:|
+| `22 pitch proxy` | `+4.80` |
+| `26 mouth-center Y offset from nose / face height` | `-3.21` |
+| `20 roll proxy` | `+2.90` |
+| `28 nose-to-chin distance / face height` | `-2.75` |
+| `24 chin Y offset from nose / face height` | `-2.73` |
+| `15 face center Y` | `+2.27` |
+
+Replay on the matched latest validation window did not identify a promotion candidate. The best grid-first evaluator candidates reached only `31.1%` grid accuracy and were still `retry`; the usable low-error candidates stayed near or below `30.5%` grid accuracy. This is below both the previous live top-row run (`52.1%`) and the latest live 29-feature run (`27.4%` for the current live model).
+
+Decision: the 29-feature live path fails the promotion gate. The new pose scalars are diagnostically useful because they are separable, but appending them directly to the live calibration model regressed aggregate grid accuracy and moved failures into `v3`/`v4`. Do not promote this live feature vector as-is. Next implementation slice should make the solvePnP-style suffix opt-in or evaluator-only, restoring the stable 23-feature live vector while keeping the new geometry available for replay diagnostics.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
