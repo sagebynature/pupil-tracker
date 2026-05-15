@@ -166,6 +166,14 @@ uv run python tools/evaluate_calibration_models.py metrics/demo.jsonl --screen-w
 
 Use the same screen dimensions as the manual run. The evaluator uses only `calibration_replay_sample` and `validation_replay_sample` scalar payloads, so it can compare candidate models without saving frames or re-running the camera session. Use `--calibration-sample-window all|early|middle|late` to test whether target-capture timing affects the model fit. The evaluator also includes replay-only target-weighted candidates for vertical edges, screen edges, and corners, plus replay-only vertical-bias and per-band correction candidates; these are comparisons, not live behavior. Add `--include-target-residuals` when a run regresses to append per-target calibration and validation residual tables for the top-ranked model.
 
+When two logged live runs disagree, compare target-specific validation behavior before changing defaults:
+
+```bash
+uv run python tools/analyze_repeat_run_diagnostics.py metrics/demo.jsonl --run START1:END1 --run START2:END2 --screen-width WIDTH --screen-height HEIGHT --grid-columns 4 --grid-rows 3
+```
+
+The repeat-run analyzer uses scalar `validation_sample` and `validation_metrics` events, trims each run to the latest metrics sample window per target, and reports signed residual shifts, grid collapse/recovery flags, and predicted grid-cell distributions.
+
 To validate the live late-sample policy without changing the default, launch the demo with:
 
 ```bash

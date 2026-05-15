@@ -496,6 +496,52 @@ Interpretation:
 
 Decision: keep edge-dense as an experimental manual option only. The next code slice should improve diagnosis/reproducibility, not tune another global model wrapper.
 
+## Repeat-Run Target Diagnostics
+
+Date: 2026-05-15
+
+Added `tools/analyze_repeat_run_diagnostics.py` to compare line-bounded validation runs from scalar telemetry. The tool uses the latest `validation_metrics.sample_count` window per target so settle-phase `validation_sample` telemetry does not pollute the target summaries.
+
+Command used for the two edge-dense runs:
+
+```bash
+uv run python tools/analyze_repeat_run_diagnostics.py metrics/demo.jsonl --run 53454:59073 --run 59074:64477 --screen-width 5120 --screen-height 1440 --grid-columns 4 --grid-rows 3
+```
+
+Per-target comparison:
+
+| Run | Target | Samples | Mean Error | Signed X | Signed Y | Grid Accuracy | Predicted Cells |
+|---|---|---:|---:|---:|---:|---:|---|
+| First edge-dense | `v0` | 38 | 386.13 px | -158.82 px | +349.67 px | 0.0% | r1c0=38 |
+| First edge-dense | `v1` | 38 | 59.84 px | +36.25 px | +40.84 px | 100.0% | r0c3=38 |
+| First edge-dense | `v2` | 38 | 77.61 px | +59.83 px | -1.62 px | 92.1% | r1c1=3, r1c2=35 |
+| First edge-dense | `v3` | 38 | 119.09 px | +10.94 px | -117.02 px | 18.4% | r1c0=4, r1c1=19, r2c0=8, r2c1=7 |
+| First edge-dense | `v4` | 38 | 248.29 px | -161.81 px | -186.37 px | 0.0% | r1c2=38 |
+| Second edge-dense | `v0` | 38 | 471.49 px | -316.87 px | +348.44 px | 0.0% | r1c0=38 |
+| Second edge-dense | `v1` | 38 | 363.80 px | +19.49 px | +361.86 px | 0.0% | r1c2=13, r1c3=25 |
+| Second edge-dense | `v2` | 38 | 184.02 px | +28.42 px | +180.97 px | 94.7% | r1c1=2, r1c2=36 |
+| Second edge-dense | `v3` | 38 | 167.58 px | -19.67 px | -164.91 px | 0.0% | r1c0=29, r1c1=9 |
+| Second edge-dense | `v4` | 38 | 88.48 px | +45.35 px | -73.42 px | 100.0% | r2c3=38 |
+
+First-vs-second flags:
+
+| Target | Signed Y Δ | Grid Accuracy Δ | Flags |
+|---|---:|---:|---|
+| `v1` | +321.03 px | -100.0% | grid-collapse, signed-y-shift |
+| `v0` | -1.23 px | +0.0% | - |
+| `v2` | +182.59 px | +2.6% | signed-y-shift |
+| `v3` | -47.90 px | -18.4% | - |
+| `v4` | +112.96 px | +100.0% | grid-recovery, signed-y-shift |
+
+Interpretation:
+
+1. The repeated stable failure is `v0`: both runs predict the top-left target into `r1c0`, about one row too low, with signed Y around `+349 px`.
+2. The unstable failure is the right side: `v1` collapses from perfect top-right classification to middle/right cells, while `v4` recovers from `0.0%` to `100.0%`.
+3. The second run's larger global signed Y bias is mainly a target-specific upward shift in `v1`, `v2`, and `v4`, not a uniform offset.
+4. This points toward run/setup or feature instability plus asymmetric model/geometry behavior. It does not justify another global Y correction wrapper.
+
+Decision: keep the repeat-run diagnostics tool and use it after future manual runs. Next implementation should add calibration-side repeat-run diagnostics, especially per-target feature drift between `v1`/`v4` and the stable `v0` failure.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -506,7 +552,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model. Prioritize repeat-run target-specific diagnostics before more geometry/model tuning.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Repeat-run diagnostics show stable top-left collapse into `r1c0` plus unstable right-side vertical shifts (`v1` collapse, `v4` recovery). Keep the features, evaluator corrections, and repeat-run diagnostic tooling for now; do not change the default sample window, add live weighting, or promote another live model. Prioritize calibration-side repeat-run feature drift diagnostics before more geometry/model tuning.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
