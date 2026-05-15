@@ -698,6 +698,49 @@ Rationale:
 
 Decision: keep this gate opt-in only. Compare the same calibration geometry with and without `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.08`; judge it by validation grid accuracy, per-target signed Y, and whether failures move to other targets.
 
+## Posture Stability Gate Run 1 Analysis
+
+Date: 2026-05-15
+
+Run range: `90650:96278`; calibration replay samples: `90877:94778`; validation replay/sample window: `95329:96277`; validation metrics line: `96278`.
+
+The run used the same 17-point edge-dense geometry as the third edge-dense baseline (`64478:69737`) with the posture stability gate intended at `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.08`.
+
+Live validation metric summary:
+
+| Metric | Third Edge-Dense Baseline | Posture Gate Run 1 | Delta |
+|---|---:|---:|---:|
+| Sample count | `190` | `190` | `0` |
+| Mean error | `221.95 px` | `149.08 px` | `-72.87 px` |
+| Median error | `237.66 px` | `148.17 px` | `-89.49 px` |
+| Max error | `499.99 px` | `383.98 px` | `-116.01 px` |
+| Mean X error | `143.69 px` | `57.92 px` | `-85.77 px` |
+| Mean Y error | `138.07 px` | `120.96 px` | `-17.11 px` |
+| Signed Y bias | `-33.76 px` | `-46.62 px` | `-12.86 px` |
+| 4x3 grid accuracy | `42.1%` | `34.7%` | `-7.4 pp` |
+| Recommendation | `retry` | `usable` | improved threshold verdict |
+
+Repeat-run target comparison against the third edge-dense baseline:
+
+| Target | Baseline Grid | Gate Run Grid | Baseline Signed Y | Gate Run Signed Y | Gate Run Predicted Cells |
+|---|---:|---:|---:|---:|---|
+| `v0` | `0.0%` | `5.3%` | `+221.85 px` | `+155.04 px` | `r0c0=8`, `r0c1=2`, `r1c0=17`, `r1c1=11` |
+| `v1` | `100.0%` | `71.1%` | `+39.31 px` | `+18.51 px` | `r0c2=11`, `r0c3=27` |
+| `v2` | `100.0%` | `92.1%` | `-2.14 px` | `+2.40 px` | `r1c1=3`, `r1c2=35` |
+| `v3` | `10.5%` | `7.9%` | `-114.89 px` | `-158.33 px` | `r1c1=35`, `r2c1=3` |
+| `v4` | `0.0%` | `0.0%` | `-303.77 px` | `-251.90 px` | `r1c2=21`, `r1c3=17` |
+
+Calibration quality events reported all 17 edge-dense targets advanced with zero rejected capture samples (`rejected_count: 0`). A replay approximation of head-pose proxy drift against the first logged sample per target found no sample above `0.08`; max observed proxy drift was about `0.0546`. This means the `0.08` threshold did not materially exercise the stability gate in this run. Lower thresholds would be needed to test actual rejection behavior; replay approximation suggests `0.05` would touch only a few edge targets, while `0.03` would be much more aggressive.
+
+Interpretation:
+
+1. The run improved pixel metrics substantially and moved the validator recommendation from `retry` to `usable`.
+2. The product metric regressed: `4x3` grid accuracy fell from `42.1%` to `34.7%`.
+3. The original `v0` collapse improved but did not resolve; `v4` remained unusable, and `v1`/`v2` lost previously perfect grid accuracy.
+4. Because no capture samples were rejected, this is not strong evidence that the posture gate itself improved the model. It is better treated as another controlled edge-dense repeat run plus evidence that `0.08` is too permissive for the current head-pose proxy scale.
+
+Decision: do not promote the posture gate threshold or edge-dense calibration. Keep the gate opt-in. Next controlled posture experiment should use a stricter threshold, likely `0.05` first, or add telemetry that records the active gate configuration before asking for more manual runs.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -708,7 +751,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Repeat-run diagnostics show stable top-left collapse into `r1c0` plus unstable right-side vertical shifts (`v1` collapse, `v4` recovery). Calibration-side repeat-run drift now shows balanced sample counts but material movement in eye-relative vertical, face-center-Y, and slope/roll-related signals at edge targets; the report names the dominant drift features directly. The top-left focus geometry corrected `v0` signed Y bias in one run but regressed `v1`, `v3`, and overall live mean error to `328.50 px`, so it is diagnostic only. Keep the features, evaluator corrections, repeat-run diagnostic tooling, edge-dense path, and top-left focus path for now; do not change the default sample window, add live weighting, promote edge-dense/top-left calibration, or add another global correction. Prioritize posture/head-pose gating or explicit pose normalization before more geometry/model tuning.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Three-band correction also leaves `v0`/`v1` at `0.0%` and does not beat the base early linear result. The first edge-dense live validation improved mean error to `181.13 px` and grid accuracy to `41.6%`, but `v0` and `v4` remained `0.0%`; the second edge-dense run regressed to `255.25 px` mean error and `38.9%` grid accuracy with large signed Y bias. Repeat-run diagnostics show stable top-left collapse into `r1c0` plus unstable right-side vertical shifts (`v1` collapse, `v4` recovery). Calibration-side repeat-run drift now shows balanced sample counts but material movement in eye-relative vertical, face-center-Y, and slope/roll-related signals at edge targets; the report names the dominant drift features directly. The top-left focus geometry corrected `v0` signed Y bias in one run but regressed `v1`, `v3`, and overall live mean error to `328.50 px`, so it is diagnostic only. The first posture-gated edge-dense run improved pixel error to `149.08 px` and reached a `usable` recommendation, but grid accuracy regressed to `34.7%` and no capture samples were rejected at threshold `0.08`; treat that threshold as too permissive, not as validated gating. Keep the features, evaluator corrections, repeat-run diagnostic tooling, edge-dense path, top-left focus path, and opt-in posture gate for now; do not change the default sample window, add live weighting, promote edge-dense/top-left calibration, promote the `0.08` posture threshold, or add another global correction. Prioritize explicit gate-config telemetry and then a stricter posture threshold or pose normalization before more geometry/model tuning.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
