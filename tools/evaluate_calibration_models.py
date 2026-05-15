@@ -148,6 +148,81 @@ class BiasCorrectedCalibrationModel:
         )
 
 
+class PerBandCorrectedCalibrationModel:
+    """Apply band-specific Y residual corrections learned from calibration predictions."""
+
+    def __init__(self, base_model: _ReplayCalibrationModel, *, bands: int = 3) -> None:
+        if bands <= 0:
+            msg = "bands must be positive"
+            raise ValueError(msg)
+        self._base_model = base_model
+        self._bands = bands
+        self._band_biases: tuple[float, ...] = ()
+        self._global_bias = 0.0
+        self._fitted = False
+
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> Any:
+        result = self._base_model.fit(samples, screen_width, screen_height)
+        residuals_by_band: list[list[float]] = [[] for _ in range(self._bands)]
+        all_residuals: list[float] = []
+        for sample in samples:
+            if not sample.observation.valid:
+                continue
+            prediction = self._base_model.predict(
+                sample.observation,
+                screen_width,
+                screen_height,
+            )
+            if not prediction.valid:
+                continue
+            residual_y = (sample.target.y * screen_height) - prediction.y
+            band = self._band_index(prediction.y, screen_height)
+            residuals_by_band[band].append(residual_y)
+            all_residuals.append(residual_y)
+        if not all_residuals:
+            msg = "per-band correction requires at least 1 valid calibration prediction"
+            raise ValueError(msg)
+        self._global_bias = sum(all_residuals) / len(all_residuals)
+        self._band_biases = tuple(
+            (sum(residuals) / len(residuals)) if residuals else self._global_bias
+            for residuals in residuals_by_band
+        )
+        self._fitted = True
+        return result
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample:
+        if not self._fitted:
+            msg = "per-band-corrected model is not fitted"
+            raise RuntimeError(msg)
+        sample = self._base_model.predict(observation, screen_width, screen_height)
+        if not sample.valid:
+            return sample
+        band = self._band_index(sample.y, screen_height)
+        return GazeSample(
+            timestamp=sample.timestamp,
+            x=sample.x,
+            y=sample.y + self._band_biases[band],
+            confidence=sample.confidence,
+            valid=True,
+            region_id=sample.region_id,
+        )
+
+    def _band_index(self, y: float, screen_height: float) -> int:
+        normalized_y = y / screen_height
+        clamped = min(max(normalized_y, 0.0), 0.999999)
+        return int(clamped * self._bands)
+
+
 class VerticalBiasCorrectedCalibrationModel:
     """Apply a one-dimensional Y residual correction learned from calibration predictions."""
 
@@ -698,10 +773,18 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
     base_candidates = (
         ReplayModelCandidate("linear-alpha-0.1", LinearRidgeCalibrationModel(alpha=0.1)),
         ReplayModelCandidate(
+            "linear-alpha-0.1-per-band-corrected",
+            PerBandCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=0.1)),
+        ),
+        ReplayModelCandidate(
             "linear-alpha-0.1-vertical-bias-corrected",
             VerticalBiasCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=0.1)),
         ),
         ReplayModelCandidate("linear-alpha-1.0", linear_1),
+        ReplayModelCandidate(
+            "linear-alpha-1.0-per-band-corrected",
+            PerBandCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
+        ),
         ReplayModelCandidate(
             "linear-alpha-1.0-vertical-bias-corrected",
             VerticalBiasCorrectedCalibrationModel(LinearRidgeCalibrationModel(alpha=1.0)),
@@ -720,6 +803,12 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
             PolynomialRidgeCalibrationModel(degree=2, alpha=0.1),
         ),
         ReplayModelCandidate("poly2-alpha-1.0", poly_1),
+        ReplayModelCandidate(
+            "poly2-alpha-1.0-per-band-corrected",
+            PerBandCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=1.0)
+            ),
+        ),
         ReplayModelCandidate(
             "poly2-alpha-1.0-vertical-bias-corrected",
             VerticalBiasCorrectedCalibrationModel(
@@ -741,6 +830,12 @@ def _candidate_models() -> tuple[ReplayModelCandidate, ...]:
         ReplayModelCandidate(
             "poly2-alpha-10.0",
             PolynomialRidgeCalibrationModel(degree=2, alpha=10.0),
+        ),
+        ReplayModelCandidate(
+            "poly2-alpha-10.0-per-band-corrected",
+            PerBandCorrectedCalibrationModel(
+                PolynomialRidgeCalibrationModel(degree=2, alpha=10.0)
+            ),
         ),
         ReplayModelCandidate(
             "poly2-alpha-10.0-vertical-bias-corrected",

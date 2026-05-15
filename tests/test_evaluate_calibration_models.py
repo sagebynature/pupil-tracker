@@ -14,6 +14,7 @@ if str(TOOLS_ROOT) not in sys.path:
 
 from evaluate_calibration_models import (  # noqa: E402
     ModelEvaluationResult,
+    PerBandCorrectedCalibrationModel,
     VerticalBiasCorrectedCalibrationModel,
     apply_target_weighting,
     evaluate_replay_models,
@@ -114,6 +115,76 @@ def _calibration_sample_at(target_id: str, x: float, y: float) -> CalibrationSam
             feature_vector=(x, y),
         ),
     )
+
+
+def test_per_band_correction_applies_band_specific_y_residuals() -> None:
+    model = PerBandCorrectedCalibrationModel(FeatureCoordinateModel())
+    calibration_samples = (
+        CalibrationSample(
+            target=CalibrationTarget(id="top", x=0.5, y=0.0),
+            observation=RawObservation(
+                timestamp=1.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(50.0, 20.0),
+            ),
+        ),
+        CalibrationSample(
+            target=CalibrationTarget(id="middle", x=0.5, y=0.5),
+            observation=RawObservation(
+                timestamp=2.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(50.0, 50.0),
+            ),
+        ),
+        CalibrationSample(
+            target=CalibrationTarget(id="bottom", x=0.5, y=1.0),
+            observation=RawObservation(
+                timestamp=3.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(50.0, 80.0),
+            ),
+        ),
+    )
+
+    model.fit(calibration_samples, screen_width=100.0, screen_height=100.0)
+    corrected_top = model.predict(
+        RawObservation(
+            timestamp=4.0,
+            valid=True,
+            confidence=0.9,
+            feature_vector=(50.0, 25.0),
+        ),
+        screen_width=100.0,
+        screen_height=100.0,
+    )
+    corrected_middle = model.predict(
+        RawObservation(
+            timestamp=5.0,
+            valid=True,
+            confidence=0.9,
+            feature_vector=(50.0, 50.0),
+        ),
+        screen_width=100.0,
+        screen_height=100.0,
+    )
+    corrected_bottom = model.predict(
+        RawObservation(
+            timestamp=6.0,
+            valid=True,
+            confidence=0.9,
+            feature_vector=(50.0, 75.0),
+        ),
+        screen_width=100.0,
+        screen_height=100.0,
+    )
+
+    assert corrected_top.x == 50.0
+    assert corrected_top.y == 5.0
+    assert corrected_middle.y == 50.0
+    assert corrected_bottom.y == 95.0
 
 
 def test_vertical_bias_correction_reduces_y_mapping_error() -> None:
@@ -439,6 +510,38 @@ def test_evaluate_replay_models_includes_weighted_target_candidates(tmp_path: Pa
         "poly2-alpha-1.0-weight-vertical_edges",
         "poly2-alpha-1.0-weight-screen_edges",
         "poly2-alpha-1.0-weight-corners",
+    } <= result_names
+
+
+def test_evaluate_replay_models_includes_per_band_correction_candidates(tmp_path: Path) -> None:
+    log_path = tmp_path / "demo.jsonl"
+    events = [
+        _replay_event("calibration_replay_sample", target_id="c0", target_x=0.0, target_y=0.0),
+        _replay_event("calibration_replay_sample", target_id="c1", target_x=1.0, target_y=0.0),
+        _replay_event("calibration_replay_sample", target_id="c2", target_x=0.0, target_y=1.0),
+        _replay_event("calibration_replay_sample", target_id="c3", target_x=1.0, target_y=1.0),
+        _replay_event("calibration_replay_sample", target_id="c4", target_x=0.5, target_y=0.5),
+        _replay_event("validation_replay_sample", target_id="v0", target_x=0.25, target_y=0.25),
+        _replay_event("validation_replay_sample", target_id="v1", target_x=0.75, target_y=0.75),
+    ]
+    _write_jsonl(log_path, events)
+    dataset = load_replay_dataset(log_path)
+
+    results = evaluate_replay_models(
+        dataset,
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=4,
+        objective="grid",
+    )
+
+    result_names = {result.model_name for result in results}
+    assert {
+        "linear-alpha-0.1-per-band-corrected",
+        "linear-alpha-1.0-per-band-corrected",
+        "poly2-alpha-1.0-per-band-corrected",
+        "poly2-alpha-10.0-per-band-corrected",
     } <= result_names
 
 
