@@ -48,6 +48,7 @@ def test_demo_config_defaults_keep_camera_preview_available(
     monkeypatch.delenv("PUPIL_TRACKER_VALIDATION_GRID_COLUMNS", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_VALIDATION_GRID_ROWS", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", raising=False)
+    monkeypatch.delenv("PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA", raising=False)
 
     config = DemoConfig.from_environment()
@@ -60,6 +61,7 @@ def test_demo_config_defaults_keep_camera_preview_available(
     assert config.validation_grid_rows == 3
     assert config.calibration_sample_window == "all"
     assert config.gaze_focus_enabled is False
+    assert config.solvepnp_style_features_enabled is False
     assert config.posture_stability_max_delta is None
 
 
@@ -108,6 +110,29 @@ def test_demo_config_parses_gaze_focus_enabled(
     config = DemoConfig.from_environment()
 
     assert config.gaze_focus_enabled is True
+
+
+def test_demo_config_parses_solvepnp_style_features_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES", "true")
+
+    config = DemoConfig.from_environment()
+
+    assert config.solvepnp_style_features_enabled is True
+
+
+def test_demo_config_rejects_invalid_solvepnp_style_features_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES", "maybe")
+
+    with pytest.raises(ValueError, match="PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES"):
+        DemoConfig.from_environment()
 
 
 def test_demo_config_rejects_invalid_gaze_focus_enabled(
@@ -238,6 +263,7 @@ def test_create_main_window_applies_config_to_camera_and_timer(
         validation_grid_rows=4,
         calibration_sample_window="late",
         gaze_focus_enabled=True,
+        solvepnp_style_features_enabled=True,
         posture_stability_max_delta=0.08,
     )
 
@@ -256,5 +282,6 @@ def test_create_main_window_applies_config_to_camera_and_timer(
         == pytest.approx(0.08)
     )
     assert window.gaze_focus_enabled is True
+    assert window.solvepnp_style_features_enabled is True
     window.stop_camera()
     qt_app.processEvents()

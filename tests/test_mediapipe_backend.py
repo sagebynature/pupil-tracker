@@ -124,7 +124,7 @@ def test_mocked_landmarks_produce_valid_observation_with_stable_feature_vector()
     assert observation.right_iris is not None
     assert observation.right_iris.x == pytest.approx(70.0)
     assert observation.right_iris.y == pytest.approx(50.0)
-    assert len(observation.feature_vector) == 29
+    assert len(observation.feature_vector) == 23
     assert observation.feature_vector[:14] == pytest.approx(
         (
             0.25,
@@ -160,6 +160,21 @@ def test_mocked_landmarks_produce_valid_observation_with_stable_feature_vector()
             35 / 60,
         )
     )
+    assert observation.frame_width == 100
+    assert observation.frame_height == 100
+
+
+def test_solvepnp_style_features_are_opt_in_for_live_mediapipe_backend() -> None:
+    face_mesh = FakeFaceMesh(FakeResult(faces=[FakeFaceLandmarks(_landmarks())]))
+    backend = MediaPipeTrackerBackend(
+        face_mesh=face_mesh,
+        use_solvepnp_style_features=True,
+    )
+
+    observation = backend.process(_frame())
+
+    assert observation.valid
+    assert len(observation.feature_vector) == 29
     assert observation.feature_vector[23:] == pytest.approx(
         (
             -10 / 80,
@@ -170,8 +185,6 @@ def test_mocked_landmarks_produce_valid_observation_with_stable_feature_vector()
             10 / 60,
         )
     )
-    assert observation.frame_width == 100
-    assert observation.frame_height == 100
 
 
 def test_close_releases_mediapipe_resources() -> None:

@@ -1088,7 +1088,7 @@ Dominant separability features now include the new pose-geometry suffix:
 
 Replay on the matched latest validation window did not identify a promotion candidate. The best grid-first evaluator candidates reached only `31.1%` grid accuracy and were still `retry`; the usable low-error candidates stayed near or below `30.5%` grid accuracy. This is below both the previous live top-row run (`52.1%`) and the latest live 29-feature run (`27.4%` for the current live model).
 
-Decision: the 29-feature live path fails the promotion gate. The new pose scalars are diagnostically useful because they are separable, but appending them directly to the live calibration model regressed aggregate grid accuracy and moved failures into `v3`/`v4`. Do not promote this live feature vector as-is. Next implementation slice should make the solvePnP-style suffix opt-in or evaluator-only, restoring the stable 23-feature live vector while keeping the new geometry available for replay diagnostics.
+Decision: the 29-feature live path fails the promotion gate. The new pose scalars are diagnostically useful because they are separable, but appending them directly to the live calibration model regressed aggregate grid accuracy and moved failures into `v3`/`v4`. Do not promote this live feature vector as-is. The implementation now keeps the stable 23-feature vector as the live default and gates the solvePnP-style suffix behind `PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES=true` for replay diagnostics and explicit manual experiments.
 
 ## Decision Gate
 

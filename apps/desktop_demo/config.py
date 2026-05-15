@@ -87,6 +87,7 @@ class DemoConfig:
     validation_grid_rows: int = 3
     calibration_sample_window: CalibrationSampleWindow = "all"
     gaze_focus_enabled: bool = False
+    solvepnp_style_features_enabled: bool = False
     posture_stability_max_delta: float | None = None
 
     @classmethod
@@ -110,6 +111,10 @@ class DemoConfig:
             os.environ.get("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", "false"),
             name="PUPIL_TRACKER_GAZE_FOCUS_ENABLED",
         )
+        solvepnp_style_features_enabled = _parse_bool(
+            os.environ.get("PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES", "false"),
+            name="PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES",
+        )
         posture_stability_max_delta = _parse_optional_positive_float(
             os.environ.get("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA"),
             name="PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA",
@@ -124,6 +129,7 @@ class DemoConfig:
             validation_grid_rows=validation_grid_rows,
             calibration_sample_window=calibration_sample_window,
             gaze_focus_enabled=gaze_focus_enabled,
+            solvepnp_style_features_enabled=solvepnp_style_features_enabled,
             posture_stability_max_delta=posture_stability_max_delta,
         )
 

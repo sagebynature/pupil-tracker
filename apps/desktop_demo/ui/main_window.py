@@ -191,6 +191,7 @@ class MainWindow(QMainWindow):
         calibration_sample_window: CalibrationSampleWindow = "all",
         gaze_focus_enabled: bool = False,
         posture_stability_max_delta: float | None = None,
+        solvepnp_style_features_enabled: bool = False,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -213,6 +214,7 @@ class MainWindow(QMainWindow):
             else activate_window_candidate
         )
         self.gaze_focus_enabled = gaze_focus_enabled
+        self.solvepnp_style_features_enabled = solvepnp_style_features_enabled
         self._last_activated_window_key: tuple[Any, ...] | None = None
         self.gaze_overlay = GazeOverlay()
         self.telemetry_path = (
@@ -419,7 +421,10 @@ class MainWindow(QMainWindow):
             self._show_model_setup_guidance(f"missing: {self.model_asset_path}")
             return False
         try:
-            backend = MediaPipeTrackerBackend(model_asset_path=str(self.model_asset_path))
+            backend = MediaPipeTrackerBackend(
+                model_asset_path=str(self.model_asset_path),
+                use_solvepnp_style_features=self.solvepnp_style_features_enabled,
+            )
         except Exception as error:
             self._show_model_setup_guidance(str(error))
             _LOGGER.warning("tracker setup failed: %s", error)

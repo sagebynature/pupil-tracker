@@ -189,6 +189,14 @@ PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW=late PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd
 
 The default live calibration sample window remains `all`; use `late` only for replay-backed manual validation until a fresh run confirms it improves practical grid/window selection.
 
+To test the opt-in solvePnP-style pose-geometry suffix during calibration capture, launch with:
+
+```bash
+PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES=true PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo
+```
+
+The default live MediaPipe feature vector remains the stable 23-feature vector. The solvePnP-style suffix appends chin and mouth geometry for scalar diagnostics and replay experiments only; keep it off unless a manual run is explicitly testing that hypothesis.
+
 To test the opt-in posture/head-pose stability gate during calibration capture, launch with a positive feature-drift threshold:
 
 ```bash
