@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,10 +17,19 @@ from evaluate_calibration_models import (  # noqa: E402
     evaluate_replay_models,
     filter_calibration_samples_by_window,
     format_model_evaluation_report,
+    format_target_residual_report,
     load_replay_dataset,
     sort_model_results,
+    summarize_calibration_target_residuals,
+    summarize_validation_target_residuals,
 )
-from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObservation  # noqa: E402
+from pupil_tracker.calibration import ValidationSample, ValidationTarget  # noqa: E402
+from pupil_tracker.models import (  # noqa: E402
+    CalibrationSample,
+    CalibrationTarget,
+    GazeSample,
+    RawObservation,
+)
 
 
 def _write_jsonl(path: Path, events: list[dict[str, object]]) -> None:
@@ -50,6 +60,30 @@ def _replay_event(
             "features": [target_x, target_y],
         },
     }
+
+
+class FeatureCoordinateModel:
+    def fit(
+        self,
+        samples: Sequence[CalibrationSample],
+        screen_width: float,
+        screen_height: float,
+    ) -> None:
+        return None
+
+    def predict(
+        self,
+        observation: RawObservation,
+        screen_width: float,
+        screen_height: float,
+    ) -> GazeSample:
+        return GazeSample(
+            timestamp=observation.timestamp,
+            x=observation.feature_vector[0],
+            y=observation.feature_vector[1],
+            confidence=observation.confidence,
+            valid=observation.valid,
+        )
 
 
 def _calibration_sample(target_id: str, sample_index: int) -> CalibrationSample:
@@ -106,6 +140,111 @@ def test_filter_calibration_samples_by_window_keeps_same_window_per_target() -> 
     assert [sample.observation.feature_vector[0] for sample in early] == [0.0, 0.0, 1.0, 1.0]
     assert [sample.observation.feature_vector[0] for sample in middle] == [2.0, 2.0, 3.0, 3.0]
     assert [sample.observation.feature_vector[0] for sample in late] == [4.0, 4.0, 5.0, 5.0]
+
+
+def test_target_residual_summaries_sort_worst_targets_first() -> None:
+    model = FeatureCoordinateModel()
+    calibration_samples = (
+        CalibrationSample(
+            target=CalibrationTarget(id="c_good", x=0.5, y=0.5),
+            observation=RawObservation(
+                timestamp=1.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(50.0, 50.0),
+            ),
+        ),
+        CalibrationSample(
+            target=CalibrationTarget(id="c_bad", x=0.5, y=0.5),
+            observation=RawObservation(
+                timestamp=2.0,
+                valid=True,
+                confidence=0.9,
+                feature_vector=(80.0, 20.0),
+            ),
+        ),
+    )
+    validation_samples = (
+        ValidationSample(
+            target=ValidationTarget(id="v_good", x=0.25, y=0.25),
+            gaze_sample=GazeSample(
+                timestamp=3.0,
+                x=26.0,
+                y=26.0,
+                confidence=0.9,
+                valid=True,
+            ),
+        ),
+        ValidationSample(
+            target=ValidationTarget(id="v_bad", x=0.75, y=0.75),
+            gaze_sample=GazeSample(
+                timestamp=4.0,
+                x=20.0,
+                y=90.0,
+                confidence=0.9,
+                valid=True,
+            ),
+        ),
+    )
+
+    calibration = summarize_calibration_target_residuals(
+        model,
+        calibration_samples,
+        screen_width=100.0,
+        screen_height=100.0,
+    )
+    validation = summarize_validation_target_residuals(
+        validation_samples,
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=4,
+    )
+
+    assert [summary.target_id for summary in calibration] == ["c_bad", "c_good"]
+    assert calibration[0].sample_count == 1
+    assert calibration[0].mean_signed_x_error_px == 30.0
+    assert calibration[0].mean_signed_y_error_px == -30.0
+    assert calibration[0].grid_cell_accuracy is None
+    assert [summary.target_id for summary in validation] == ["v_bad", "v_good"]
+    assert validation[0].mean_signed_x_error_px == -55.0
+    assert validation[0].mean_signed_y_error_px == 15.0
+    assert validation[0].grid_cell_accuracy == 0.0
+    assert validation[1].grid_cell_accuracy == 1.0
+
+
+def test_target_residual_report_formats_markdown_tables(tmp_path: Path) -> None:
+    log_path = tmp_path / "demo.jsonl"
+    events = [
+        _replay_event("calibration_replay_sample", target_id="c0", target_x=0.0, target_y=0.0),
+        _replay_event("calibration_replay_sample", target_id="c1", target_x=1.0, target_y=1.0),
+        _replay_event("calibration_replay_sample", target_id="c2", target_x=0.0, target_y=1.0),
+        _replay_event("validation_replay_sample", target_id="v0", target_x=0.25, target_y=0.25),
+        _replay_event("validation_replay_sample", target_id="v1", target_x=0.75, target_y=0.75),
+    ]
+    _write_jsonl(log_path, events)
+    dataset = load_replay_dataset(log_path)
+    result = evaluate_replay_models(
+        dataset,
+        screen_width=100.0,
+        screen_height=100.0,
+        grid_columns=4,
+        grid_rows=4,
+        objective="grid",
+    )[0]
+
+    report = format_target_residual_report(result)
+
+    assert f"## Target Residuals: {result.model_name}" in report
+    assert "### Calibration Residuals" in report
+    assert "### Validation Residuals" in report
+    residual_header = (
+        "| Target | Target X | Target Y | Samples | Mean Error | Mean X | Mean Y | "
+        "Signed X | Signed Y | Grid Accuracy |"
+    )
+    assert residual_header in report
+    assert "N/A" in report
+    assert "v0" in report
 
 
 def test_sort_model_results_supports_grid_first_objective() -> None:

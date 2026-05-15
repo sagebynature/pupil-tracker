@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from math import hypot
 from pathlib import Path
 from typing import Any, Literal, NoReturn, Protocol, cast
 
@@ -20,6 +22,7 @@ from pupil_tracker.models import CalibrationSample, CalibrationTarget, GazeSampl
 
 EvaluationObjective = Literal["error", "grid"]
 SampleWindow = Literal["all", "early", "middle", "late"]
+ResidualRow = tuple[float, float, float, float, float, bool | None]
 
 
 class _ReplayCalibrationModel(Protocol):
@@ -66,11 +69,29 @@ class ReplayDataset:
 
 
 @dataclass(frozen=True)
+class TargetResidualSummary:
+    """Per-target replay residual summary for calibration or validation samples."""
+
+    target_id: str
+    target_x: float
+    target_y: float
+    sample_count: int
+    mean_error_px: float
+    mean_abs_x_error_px: float
+    mean_abs_y_error_px: float
+    mean_signed_x_error_px: float
+    mean_signed_y_error_px: float
+    grid_cell_accuracy: float | None = None
+
+
+@dataclass(frozen=True)
 class ModelEvaluationResult:
     """Metrics for one model variant evaluated against replay validation samples."""
 
     model_name: str
     metrics: Any
+    calibration_target_residuals: tuple[TargetResidualSummary, ...] = ()
+    validation_target_residuals: tuple[TargetResidualSummary, ...] = ()
 
 
 class BiasCorrectedCalibrationModel:
@@ -266,6 +287,134 @@ def _sample_window_bounds(sample_count: int, *, window: SampleWindow) -> tuple[i
     return (0, sample_count)
 
 
+def summarize_calibration_target_residuals(
+    model: _ReplayCalibrationModel,
+    samples: Sequence[CalibrationSample],
+    *,
+    screen_width: float,
+    screen_height: float,
+) -> tuple[TargetResidualSummary, ...]:
+    """Summarize fitted-model residuals grouped by calibration target."""
+
+    rows_by_target: dict[str, list[ResidualRow]] = defaultdict(list)
+    for sample in samples:
+        if not sample.observation.valid:
+            continue
+        prediction = model.predict(sample.observation, screen_width, screen_height)
+        if not prediction.valid:
+            continue
+        target_x = sample.target.x * screen_width
+        target_y = sample.target.y * screen_height
+        dx = prediction.x - target_x
+        dy = prediction.y - target_y
+        rows_by_target[sample.target.id].append(
+            (sample.target.x, sample.target.y, dx, dy, hypot(dx, dy), None)
+        )
+    return _summarize_residual_rows(rows_by_target)
+
+
+def summarize_validation_target_residuals(
+    samples: Sequence[ValidationSample],
+    *,
+    screen_width: float,
+    screen_height: float,
+    grid_columns: int,
+    grid_rows: int,
+) -> tuple[TargetResidualSummary, ...]:
+    """Summarize predicted validation residuals grouped by validation target."""
+
+    rows_by_target: dict[str, list[ResidualRow]] = defaultdict(list)
+    for sample in samples:
+        if not sample.gaze_sample.valid:
+            continue
+        target_x = sample.target.x * screen_width
+        target_y = sample.target.y * screen_height
+        dx = sample.gaze_sample.x - target_x
+        dy = sample.gaze_sample.y - target_y
+        target_cell = _grid_cell_id(
+            target_x,
+            target_y,
+            screen_width,
+            screen_height,
+            columns=grid_columns,
+            rows=grid_rows,
+        )
+        gaze_cell = _grid_cell_id(
+            sample.gaze_sample.x,
+            sample.gaze_sample.y,
+            screen_width,
+            screen_height,
+            columns=grid_columns,
+            rows=grid_rows,
+        )
+        rows_by_target[sample.target.id].append(
+            (
+                sample.target.x,
+                sample.target.y,
+                dx,
+                dy,
+                hypot(dx, dy),
+                target_cell == gaze_cell,
+            )
+        )
+    return _summarize_residual_rows(rows_by_target)
+
+
+def _summarize_residual_rows(
+    rows_by_target: Mapping[str, Sequence[ResidualRow]],
+) -> tuple[TargetResidualSummary, ...]:
+    summaries: list[TargetResidualSummary] = []
+    for target_id, rows in rows_by_target.items():
+        if not rows:
+            continue
+        signed_x_errors = [row[2] for row in rows]
+        signed_y_errors = [row[3] for row in rows]
+        errors = [row[4] for row in rows]
+        grid_matches = [row[5] for row in rows if row[5] is not None]
+        summaries.append(
+            TargetResidualSummary(
+                target_id=target_id,
+                target_x=rows[0][0],
+                target_y=rows[0][1],
+                sample_count=len(rows),
+                mean_error_px=sum(errors) / len(errors),
+                mean_abs_x_error_px=sum(abs(value) for value in signed_x_errors)
+                / len(signed_x_errors),
+                mean_abs_y_error_px=sum(abs(value) for value in signed_y_errors)
+                / len(signed_y_errors),
+                mean_signed_x_error_px=sum(signed_x_errors) / len(signed_x_errors),
+                mean_signed_y_error_px=sum(signed_y_errors) / len(signed_y_errors),
+                grid_cell_accuracy=(
+                    sum(1 for value in grid_matches if value) / len(grid_matches)
+                    if grid_matches
+                    else None
+                ),
+            )
+        )
+    return tuple(
+        sorted(
+            summaries,
+            key=lambda summary: (-summary.mean_error_px, summary.target_id),
+        )
+    )
+
+
+def _grid_cell_id(
+    x: float,
+    y: float,
+    screen_width: float,
+    screen_height: float,
+    *,
+    columns: int,
+    rows: int,
+) -> str:
+    clamped_x = min(max(x, 0.0), screen_width)
+    clamped_y = min(max(y, 0.0), screen_height)
+    column = min(int(clamped_x / (screen_width / columns)), columns - 1)
+    row = min(int(clamped_y / (screen_height / rows)), rows - 1)
+    return f"r{row}c{column}"
+
+
 def evaluate_replay_models(
     dataset: ReplayDataset,
     *,
@@ -303,7 +452,27 @@ def evaluate_replay_models(
             grid_columns=grid_columns,
             grid_rows=grid_rows,
         )
-        results.append(ModelEvaluationResult(model_name=model_name, metrics=metrics))
+        calibration_residuals = summarize_calibration_target_residuals(
+            model,
+            calibration_samples,
+            screen_width=screen_width,
+            screen_height=screen_height,
+        )
+        validation_residuals = summarize_validation_target_residuals(
+            validation_samples,
+            screen_width=screen_width,
+            screen_height=screen_height,
+            grid_columns=grid_columns,
+            grid_rows=grid_rows,
+        )
+        results.append(
+            ModelEvaluationResult(
+                model_name=model_name,
+                metrics=metrics,
+                calibration_target_residuals=calibration_residuals,
+                validation_target_residuals=validation_residuals,
+            )
+        )
     return sort_model_results(results, objective=objective)
 
 
@@ -345,6 +514,48 @@ def format_model_evaluation_report(results: Sequence[ModelEvaluationResult]) -> 
             f"{metrics.mean_signed_y_error_px:+.2f} px | "
             f"{metrics.grid_cell_accuracy:.1%} | "
             f"{metrics.recommendation} |"
+        )
+    return "\n".join(lines)
+
+
+def format_target_residual_report(result: ModelEvaluationResult) -> str:
+    """Format per-target residual summaries for one model as Markdown."""
+
+    return "\n\n".join(
+        (
+            f"## Target Residuals: {result.model_name}",
+            "### Calibration Residuals\n"
+            + _format_residual_table(result.calibration_target_residuals),
+            "### Validation Residuals\n"
+            + _format_residual_table(result.validation_target_residuals),
+        )
+    )
+
+
+def _format_residual_table(summaries: Sequence[TargetResidualSummary]) -> str:
+    lines = [
+        "| Target | Target X | Target Y | Samples | Mean Error | Mean X | Mean Y | "
+        "Signed X | Signed Y | Grid Accuracy |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for summary in summaries:
+        grid_accuracy = (
+            f"{summary.grid_cell_accuracy:.1%}"
+            if summary.grid_cell_accuracy is not None
+            else "N/A"
+        )
+        lines.append(
+            "| "
+            f"{summary.target_id} | "
+            f"{summary.target_x:.2f} | "
+            f"{summary.target_y:.2f} | "
+            f"{summary.sample_count} | "
+            f"{summary.mean_error_px:.2f} px | "
+            f"{summary.mean_abs_x_error_px:.2f} px | "
+            f"{summary.mean_abs_y_error_px:.2f} px | "
+            f"{summary.mean_signed_x_error_px:+.2f} px | "
+            f"{summary.mean_signed_y_error_px:+.2f} px | "
+            f"{grid_accuracy} |"
         )
     return "\n".join(lines)
 
@@ -550,6 +761,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="all",
         help="Fit models with all or one third of each target's calibration samples.",
     )
+    parser.add_argument(
+        "--include-target-residuals",
+        action="store_true",
+        help="Append calibration and validation residual tables for the top-ranked model.",
+    )
     args = parser.parse_args(argv)
     try:
         dataset = load_replay_dataset(args.log_path)
@@ -565,6 +781,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as error:
         _die(str(error))
     print(format_model_evaluation_report(results))
+    if args.include_target_residuals and results:
+        print()
+        print(format_target_residual_report(results[0]))
     return 0
 
 
