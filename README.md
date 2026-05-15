@@ -96,7 +96,7 @@ Expected manual path:
 
 1. Click Start Camera and confirm live preview.
 2. Center your face and confirm tracker annotations appear.
-3. Click Start Calibration and follow the 9 fullscreen targets.
+3. Click Start Calibration and follow the 9 fullscreen targets. For the replay-backed geometry experiment, click Start Edge-Dense Calibration instead and follow all 17 fullscreen targets.
 4. Hold gaze through each target's Settle and Capture phases.
 5. Confirm calibration completes with fit metrics.
 6. Click Start Validation and follow the validation targets.
@@ -135,6 +135,8 @@ Use the validation overlay to diagnose failures. The target dot is where you sho
 If the recommendation is `retry`, improve lighting/camera position, reduce head movement, and recalibrate.
 
 Calibration targets are shown fullscreen because the fitted model maps observations to full-monitor coordinates. The outer 9-point targets remain inset from the physical edges so they sample the usable screen area without forcing hard-to-hold edge fixations.
+
+Start Edge-Dense Calibration is an experimental, non-default geometry check for top-row and edge/corner failures seen in replay analysis. It uses 17 targets: denser top/bottom edge rows, upper/lower quadrant points aligned with validation hot spots, and middle left/center/right anchors. Use it for a fresh logged manual validation run before changing live defaults.
 
 For longer live checks, enable Show Heatmap and stare at fixed points. The heatmap should cluster where you hold your gaze. Use Clear Heatmap between trials.
 

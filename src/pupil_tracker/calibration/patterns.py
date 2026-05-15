@@ -32,6 +32,46 @@ def vertical_grid_pattern(margin: float = 0.1) -> list[CalibrationTarget]:
     return grid_pattern(rows=5, cols=3, margin=margin)
 
 
+def edge_dense_calibration_pattern(margin: float = 0.1) -> list[CalibrationTarget]:
+    """Return an experimental edge-dense pattern for corner/edge validation.
+
+    The layout preserves inset screen edges while adding extra top/bottom edge
+    samples plus validation-like upper/lower quadrant points. It is intended as
+    an opt-in live calibration geometry experiment, not the default pattern.
+    """
+
+    if not 0.0 <= margin < 0.5:
+        raise ValueError("margin must satisfy 0 <= margin < 0.5")
+
+    top_targets = [
+        CalibrationTarget(
+            id=f"top{index}",
+            x=_coordinate(index=index, count=5, margin=margin),
+            y=margin,
+        )
+        for index in range(5)
+    ]
+    bottom_targets = [
+        CalibrationTarget(
+            id=f"bottom{index}",
+            x=_coordinate(index=index, count=5, margin=margin),
+            y=1.0 - margin,
+        )
+        for index in range(5)
+    ]
+    return [
+        *top_targets,
+        CalibrationTarget(id="upper_left", x=0.25, y=0.25),
+        CalibrationTarget(id="upper_right", x=0.75, y=0.25),
+        CalibrationTarget(id="mid_left", x=margin, y=0.5),
+        CalibrationTarget(id="mid_center", x=0.5, y=0.5),
+        CalibrationTarget(id="mid_right", x=1.0 - margin, y=0.5),
+        CalibrationTarget(id="lower_left", x=0.25, y=0.75),
+        CalibrationTarget(id="lower_right", x=0.75, y=0.75),
+        *bottom_targets,
+    ]
+
+
 def _coordinate(index: int, count: int, margin: float) -> float:
     if count == 1:
         return 0.5

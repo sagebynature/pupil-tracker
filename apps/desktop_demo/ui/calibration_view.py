@@ -179,6 +179,7 @@ class CalibrationView(QWidget):
         self.target_widget = CalibrationTargetWidget(self.flow)
         self.start_button = QPushButton("Start Calibration")
         self.vertical_calibration_button = QPushButton("Start Linear Vertical Calibration")
+        self.edge_dense_calibration_button = QPushButton("Start Edge-Dense Calibration")
         self.validation_button = QPushButton("Start Validation")
         self.validation_button.setEnabled(False)
 
@@ -189,6 +190,7 @@ class CalibrationView(QWidget):
         layout.addWidget(self.target_widget)
         layout.addWidget(self.start_button)
         layout.addWidget(self.vertical_calibration_button)
+        layout.addWidget(self.edge_dense_calibration_button)
         layout.addWidget(self.validation_button)
         self.setLayout(layout)
         self.refresh()

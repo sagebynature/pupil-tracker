@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -42,12 +42,13 @@ from pupil_tracker.calibration import (
     LinearRidgeCalibrationModel,
     PolynomialRidgeCalibrationModel,
     TimedCalibrationConfig,
+    edge_dense_calibration_pattern,
     summarize_feature_diagnostics,
     validation_pattern,
     vertical_grid_pattern,
 )
 from pupil_tracker.camera import CameraError, OpenCVCamera
-from pupil_tracker.models import GazeSample, Point2D, WindowCandidate
+from pupil_tracker.models import CalibrationTarget, GazeSample, Point2D, WindowCandidate
 from pupil_tracker.platform import candidate_at_point, list_visible_windows
 from pupil_tracker.telemetry import (
     JsonlLogger,
@@ -260,6 +261,9 @@ class MainWindow(QMainWindow):
         self.calibration_view.vertical_calibration_button.clicked.connect(
             self.start_vertical_calibration
         )
+        self.calibration_view.edge_dense_calibration_button.clicked.connect(
+            self.start_edge_dense_calibration
+        )
         self.calibration_view.validation_button.clicked.connect(self.start_validation)
 
         controls = QHBoxLayout()
@@ -404,11 +408,33 @@ class MainWindow(QMainWindow):
     def start_vertical_calibration(self) -> None:
         """Start the denser vertical calibration strategy for live accuracy checks."""
 
+        self._start_linear_calibration_with_targets(
+            targets=vertical_grid_pattern(),
+            title="15-point linear vertical calibration",
+            unavailable_message="Vertical calibration unavailable for injected sessions",
+        )
+
+    def start_edge_dense_calibration(self) -> None:
+        """Start the experimental edge-dense geometry calibration strategy."""
+
+        self._start_linear_calibration_with_targets(
+            targets=edge_dense_calibration_pattern(),
+            title="17-point edge-dense calibration",
+            unavailable_message="Edge-dense calibration unavailable for injected sessions",
+        )
+
+    def _start_linear_calibration_with_targets(
+        self,
+        *,
+        targets: Sequence[CalibrationTarget],
+        title: str,
+        unavailable_message: str,
+    ) -> None:
         if not self._uses_default_calibration_session:
-            self.debug_label.setText("Vertical calibration unavailable for injected sessions")
+            self.debug_label.setText(unavailable_message)
             return
-        flow = CalibrationFlowState(targets=vertical_grid_pattern())
-        self.calibration_view.set_flow(flow, title="15-point linear vertical calibration")
+        flow = CalibrationFlowState(targets=targets)
+        self.calibration_view.set_flow(flow, title=title)
         self.calibration_target_overlay.flow = flow
         screen_width, screen_height = self._screen_size()
         self.calibration_session = CalibrationSession(
@@ -417,6 +443,7 @@ class MainWindow(QMainWindow):
             screen_width=screen_width,
             screen_height=screen_height,
             timing_config=TimedCalibrationConfig(),
+            calibration_sample_window=self.calibration_sample_window,
         )
         self.gaze_runtime = GazeRuntime(model=cast(Any, self.calibration_session.model))
         self.start_calibration()

@@ -191,6 +191,41 @@ def test_start_vertical_calibration_uses_dense_vertical_pattern(
     qt_app.processEvents()
 
 
+def test_start_edge_dense_calibration_uses_experimental_geometry(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    window = MainWindow(
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        tracking_runtime=FakeTrackingRuntime([valid_observation()]),
+    )
+
+    window.start_edge_dense_calibration()
+
+    flow = window.calibration_view.flow
+    assert len(flow.targets) == 17
+    assert [target.id for target in flow.targets[0:7]] == [
+        "top0",
+        "top1",
+        "top2",
+        "top3",
+        "top4",
+        "upper_left",
+        "upper_right",
+    ]
+    assert flow.targets[-1].id == "bottom4"
+    assert window.calibration_session.flow is flow
+    assert window.calibration_view.flow is flow
+    assert window.calibration_target_overlay.flow is flow
+    assert isinstance(window.calibration_session.model, LinearRidgeCalibrationModel)
+    assert window.calibration_session.model.alpha == 1.0
+    assert window.calibration_view.title_label.text() == "17-point edge-dense calibration"
+    assert window.calibration_target_overlay.isVisible()
+    window.close()
+    qt_app.processEvents()
+
+
 def test_start_calibration_shows_full_screen_target_overlay(qt_app: QApplication) -> None:
     from desktop_demo.calibration_session import CalibrationSession
     from desktop_demo.ui.main_window import MainWindow

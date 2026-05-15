@@ -10,7 +10,11 @@ from pupil_tracker.calibration.model import (
     LinearRidgeCalibrationModel,
     PolynomialRidgeCalibrationModel,
 )
-from pupil_tracker.calibration.patterns import grid_pattern, vertical_grid_pattern
+from pupil_tracker.calibration.patterns import (
+    edge_dense_calibration_pattern,
+    grid_pattern,
+    vertical_grid_pattern,
+)
 from pupil_tracker.calibration.quality import (
     CalibrationQualityFilter,
     CalibrationSampleDecision,
@@ -50,6 +54,7 @@ __all__ = [
     "ValidationSample",
     "ValidationTarget",
     "compute_validation_metrics",
+    "edge_dense_calibration_pattern",
     "grid_pattern",
     "summarize_feature_diagnostics",
     "summarize_target_quality",

@@ -30,6 +30,7 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 
 - [ ] Confirm the app window opens with the title `Pupil Tracker Demo`.
 - [ ] Confirm the UI shows camera controls, calibration/validation controls, heatmap controls, debug text, and telemetry controls.
+- [ ] Confirm the UI includes the experimental Start Edge-Dense Calibration control for replay-backed geometry checks.
 - [ ] Confirm the camera is not active until Start Camera is clicked.
 - [ ] If the model variable is missing, confirm Start Calibration shows setup guidance mentioning `PUPIL_TRACKER_MEDIAPIPE_MODEL` instead of crashing.
 
@@ -90,6 +91,19 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 - [ ] Confirm low-quality targets are retried rather than silently accepted.
 - [ ] Confirm calibration completion produces collected samples for all 9 targets.
 - [ ] Confirm fit metrics include sample count, mean error, and max error.
+
+## Experimental Edge-Dense Calibration
+
+Use this path only when comparing calibration geometry against a clean 9-point baseline. It is not the default.
+
+- [ ] Start logging before calibration so replay samples and validation metrics are captured.
+- [ ] Click Start Edge-Dense Calibration.
+- [ ] Confirm the target display covers the primary monitor.
+- [ ] Follow the 17 targets, including dense top/bottom edge rows and upper/lower quadrant targets.
+- [ ] Confirm the title reads `17-point edge-dense calibration`.
+- [ ] Confirm calibration completes and enables Start Validation.
+- [ ] Run validation immediately after the edge-dense calibration.
+- [ ] Compare 4x3 grid accuracy, per-target top-row behavior, mean X/Y error, and Y bias against the latest 9-point run before changing defaults.
 
 ## Validation
 

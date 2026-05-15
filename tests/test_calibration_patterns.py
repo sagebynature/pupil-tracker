@@ -1,6 +1,10 @@
 import pytest
 
-from pupil_tracker.calibration.patterns import grid_pattern, vertical_grid_pattern
+from pupil_tracker.calibration.patterns import (
+    edge_dense_calibration_pattern,
+    grid_pattern,
+    vertical_grid_pattern,
+)
 
 
 def test_grid_pattern_returns_stable_nine_point_grid() -> None:
@@ -81,6 +85,53 @@ def test_vertical_grid_pattern_returns_inset_three_by_five_targets() -> None:
         pytest.approx((0.9, 0.9)),
     ]
     assert targets[6].y == pytest.approx(0.5)
+
+
+def test_edge_dense_calibration_pattern_adds_top_and_edge_coverage() -> None:
+    targets = edge_dense_calibration_pattern(margin=0.1)
+
+    assert len(targets) == 17
+    assert [target.id for target in targets] == [
+        "top0",
+        "top1",
+        "top2",
+        "top3",
+        "top4",
+        "upper_left",
+        "upper_right",
+        "mid_left",
+        "mid_center",
+        "mid_right",
+        "lower_left",
+        "lower_right",
+        "bottom0",
+        "bottom1",
+        "bottom2",
+        "bottom3",
+        "bottom4",
+    ]
+    assert [(target.x, target.y) for target in targets[0:5]] == [
+        pytest.approx((0.1, 0.1)),
+        pytest.approx((0.3, 0.1)),
+        pytest.approx((0.5, 0.1)),
+        pytest.approx((0.7, 0.1)),
+        pytest.approx((0.9, 0.1)),
+    ]
+    assert [(targets[5].x, targets[5].y), (targets[6].x, targets[6].y)] == [
+        pytest.approx((0.25, 0.25)),
+        pytest.approx((0.75, 0.25)),
+    ]
+    assert [(targets[10].x, targets[10].y), (targets[11].x, targets[11].y)] == [
+        pytest.approx((0.25, 0.75)),
+        pytest.approx((0.75, 0.75)),
+    ]
+    assert [(target.x, target.y) for target in targets[-5:]] == [
+        pytest.approx((0.1, 0.9)),
+        pytest.approx((0.3, 0.9)),
+        pytest.approx((0.5, 0.9)),
+        pytest.approx((0.7, 0.9)),
+        pytest.approx((0.9, 0.9)),
+    ]
 
 
 @pytest.mark.parametrize(
