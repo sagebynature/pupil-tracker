@@ -109,6 +109,40 @@ def calibration_event_payload(
     }
 
 
+def calibration_replay_sample_payload(
+    target: CalibrationTarget,
+    observation: RawObservation,
+) -> dict[str, Any]:
+    """Serialize one scalar calibration sample for offline replay."""
+
+    return _replay_sample_payload(target, observation)
+
+
+def validation_replay_sample_payload(
+    target: ValidationTarget,
+    observation: RawObservation,
+) -> dict[str, Any]:
+    """Serialize one scalar validation observation for offline replay."""
+
+    return _replay_sample_payload(target, observation)
+
+
+def _replay_sample_payload(
+    target: CalibrationTarget | ValidationTarget,
+    observation: RawObservation,
+) -> dict[str, Any]:
+    return {
+        "target_id": target.id,
+        "target_x": target.x,
+        "target_y": target.y,
+        "timestamp": observation.timestamp,
+        "valid": observation.valid,
+        "confidence": observation.confidence,
+        "feature_count": len(observation.feature_vector),
+        "features": list(observation.feature_vector),
+    }
+
+
 def calibration_target_quality_payload(
     quality: TargetQualitySummary,
 ) -> dict[str, Any]:

@@ -18,15 +18,24 @@ from pupil_tracker.calibration import (
     TargetFeatureSummary,
     TargetQualitySummary,
     ValidationMetrics,
+    ValidationTarget,
 )
-from pupil_tracker.models import CalibrationTarget, GazeSample, Rect, WindowCandidate
+from pupil_tracker.models import (
+    CalibrationTarget,
+    GazeSample,
+    RawObservation,
+    Rect,
+    WindowCandidate,
+)
 from pupil_tracker.telemetry import (
     JsonlLogger,
     calibration_event_payload,
+    calibration_replay_sample_payload,
     calibration_target_quality_payload,
     feature_diagnostics_payload,
     gaze_event_payload,
     validation_metrics_payload,
+    validation_replay_sample_payload,
     window_candidate_payload,
 )
 
@@ -73,6 +82,46 @@ def test_feature_diagnostics_payload_is_scalar_only() -> None:
     assert "image" not in payload_json
     assert "frame" not in payload_json
     assert "feature_vector" not in payload_json
+
+
+def test_replay_sample_payloads_are_scalar_only() -> None:
+    observation = RawObservation(
+        timestamp=3.5,
+        valid=True,
+        confidence=0.91,
+        feature_vector=(0.1, 0.2, 0.3),
+    )
+    calibration_target = CalibrationTarget(id="r0c0", x=0.1, y=0.2)
+    validation_target = ValidationTarget(id="v0", x=0.25, y=0.75)
+
+    calibration_payload = calibration_replay_sample_payload(calibration_target, observation)
+    validation_payload = validation_replay_sample_payload(validation_target, observation)
+
+    assert calibration_payload == {
+        "target_id": "r0c0",
+        "target_x": 0.1,
+        "target_y": 0.2,
+        "timestamp": 3.5,
+        "valid": True,
+        "confidence": 0.91,
+        "feature_count": 3,
+        "features": [0.1, 0.2, 0.3],
+    }
+    assert validation_payload == {
+        "target_id": "v0",
+        "target_x": 0.25,
+        "target_y": 0.75,
+        "timestamp": 3.5,
+        "valid": True,
+        "confidence": 0.91,
+        "feature_count": 3,
+        "features": [0.1, 0.2, 0.3],
+    }
+    encoded = json.dumps([calibration_payload, validation_payload])
+    assert "image" not in encoded
+    assert "frame" not in encoded
+    assert "landmark" not in encoded
+    assert "feature_vector" not in encoded
 
 
 @pytest.fixture
