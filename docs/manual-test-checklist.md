@@ -106,6 +106,19 @@ Use this path only when comparing calibration geometry against a clean 9-point b
 - [ ] Run validation immediately after the edge-dense calibration.
 - [ ] Compare 4x3 grid accuracy, per-target top-row behavior, mean X/Y error, and Y bias against the latest 9-point run before changing defaults.
 
+## Experimental Top-Left Focus Calibration
+
+Use this path only when investigating the persistent top-left `v0` collapse after edge-dense runs. It is not the default.
+
+- [ ] Start logging before calibration so replay samples and validation metrics are captured.
+- [ ] Click Start Top-Left Focus Calibration.
+- [ ] Confirm the target display covers the primary monitor.
+- [ ] Follow the 25 targets, including the 3x3 local cluster around the top-left validation region.
+- [ ] Confirm the title reads `25-point top-left focus calibration`.
+- [ ] Confirm calibration completes and enables Start Validation.
+- [ ] Run validation immediately after the top-left focus calibration.
+- [ ] Compare `v0` grid accuracy, predicted-cell distribution, `v3`/`v4` regressions, mean X/Y error, and signed Y bias against the latest edge-dense runs before changing defaults.
+
 ## Validation
 
 - [ ] Click Start Validation after calibration completes.

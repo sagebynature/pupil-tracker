@@ -632,6 +632,26 @@ Interpretation:
 
 Decision: keep the asymmetric replay candidates for comparison only. Do not promote edge-dense calibration, asymmetric correction, affine correction, target weighting, or a sample-window change to live behavior yet. The next high-leverage code slice should test a true geometry experiment for the stable top-left collapse, or add a controlled head/camera posture gate before more model wrappers.
 
+## Top-Left Focus Geometry Experiment Added
+
+Date: 2026-05-15
+
+Added a new non-default `25-point top-left focus calibration` path after replay-only correction candidates failed to produce a repeatable promotion signal. The pattern keeps broad edge-dense coverage and adds a 3x3 local calibration cluster around the held-out top-left validation region `(0.25, 0.25)`:
+
+| Cluster target ids | Coordinates |
+|---|---|
+| `tl_upper_left`, `tl_upper_mid`, `tl_upper_right` | `(0.18, 0.18)`, `(0.25, 0.18)`, `(0.32, 0.18)` |
+| `tl_center_left`, `tl_center`, `tl_center_right` | `(0.18, 0.25)`, `(0.25, 0.25)`, `(0.32, 0.25)` |
+| `tl_lower_left`, `tl_lower_mid`, `tl_lower_right` | `(0.18, 0.32)`, `(0.25, 0.32)`, `(0.32, 0.32)` |
+
+Rationale:
+
+1. `v0` remains the stable failure across three edge-dense runs, mostly collapsing from top-left into `r1c0`.
+2. Global correction, target weighting, vertical-bias correction, per-band correction, and asymmetric quadrant correction did not solve the repeat-run failure.
+3. The next testable hypothesis is local calibration geometry around the failing held-out region, not another model wrapper.
+
+Decision: expose the pattern through a separate `Start Top-Left Focus Calibration` control only. Keep the default 9-point path and the 17-point edge-dense path unchanged. Require a fresh logged manual validation run and repeat-run comparison before any promotion decision.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
