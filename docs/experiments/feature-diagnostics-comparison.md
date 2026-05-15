@@ -110,6 +110,49 @@ Interpretation:
 3. The scalar feature expansion improved pixel error and moved the recommendation from `retry` to `usable`.
 4. Practical 4x3 grid accuracy is still too low for dependable window selection.
 
+## Replay Model Evaluation
+
+Date: 2026-05-15
+
+After scalar replay telemetry was added, a fresh manual run produced replayable calibration and validation samples:
+
+- `calibration_feature_diagnostics`: line `47063`
+- `validation_metrics`: line `48429`
+- `calibration_replay_sample` events in latest run: `1148`
+- `validation_replay_sample` events in latest run: `320`
+
+Latest live validation metrics:
+
+| Metric | Value |
+|---|---:|
+| Sample count | `190` |
+| Mean error | `256.20 px` |
+| Median error | `260.21 px` |
+| Max error | `474.61 px` |
+| Mean X error | `127.41 px` |
+| Mean Y error | `180.68 px` |
+| Signed Y bias | `-70.26 px` |
+| 4x3 grid accuracy | `40.0%` |
+| Recommendation | `retry` |
+
+Offline replay model comparison on the same scalar samples:
+
+| Model | Mean Error | Mean X | Mean Y | Signed Y | Grid Accuracy | Recommendation |
+|---|---:|---:|---:|---:|---:|---|
+| `poly2-alpha-1.0` | 182.55 px | 123.71 px | 101.67 px | +37.17 px | 13.8% | usable |
+| `linear-alpha-0.1` | 187.63 px | 130.74 px | 103.89 px | +30.15 px | 8.8% | usable |
+| `linear-alpha-1.0` | 201.91 px | 114.58 px | 133.37 px | -13.42 px | 19.7% | retry |
+| `poly2-alpha-10.0` | 205.10 px | 115.63 px | 135.89 px | -11.06 px | 26.6% | retry |
+| `linear-alpha-10.0` | 235.69 px | 126.19 px | 170.44 px | -19.63 px | 15.3% | retry |
+| `poly2-alpha-0.1` | 248.63 px | 211.84 px | 104.91 px | +0.19 px | 3.1% | retry |
+
+Interpretation:
+
+1. The offline evaluator is now useful: one manual run compared six model variants without another camera session.
+2. `poly2-alpha-1.0` materially improves pixel error versus live validation (`256.20 px` to `182.55 px`) and reduces mean Y error (`180.68 px` to `101.67 px`).
+3. The same best-by-pixel-error model regresses the practical 4x3 window-selection objective (`40.0%` live grid accuracy to `13.8%` offline grid accuracy).
+4. Do not switch the live model solely to `poly2-alpha-1.0` yet. The next evaluator/modeling slice should optimize for the product objective: grid-cell accuracy first, then pixel error as a secondary metric.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -120,7 +163,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-This run clears the first three gates partially and improves the fourth only slightly. Keep the features for now because pixel error improved and the diagnostic signal is measurable. Do not treat the current build as ready for dependable window selection because grid accuracy remains only `12.6%`.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px` and offline candidates trade grid accuracy against pixel error. Keep the features for now, but do not treat the current build as ready for dependable window selection until the model objective is tuned for grid-cell accuracy.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
