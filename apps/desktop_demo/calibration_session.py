@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from enum import Enum
 from time import monotonic
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pupil_tracker.calibration import (
     CalibrationFitResult,
@@ -18,6 +18,50 @@ from pupil_tracker.calibration import (
     summarize_target_quality,
 )
 from pupil_tracker.models import CalibrationSample, CalibrationTarget, RawObservation
+
+CalibrationSampleWindow = Literal["all", "early", "middle", "late"]
+
+
+def select_calibration_samples_by_window(
+    samples: Sequence[CalibrationSample],
+    *,
+    window: CalibrationSampleWindow,
+) -> tuple[CalibrationSample, ...]:
+    """Select the same capture window from each calibration target."""
+
+    if window == "all":
+        return tuple(samples)
+
+    indices_by_target: dict[str, list[int]] = {}
+    for index, sample in enumerate(samples):
+        indices_by_target.setdefault(sample.target.id, []).append(index)
+
+    selected_indices: set[int] = set()
+    for indices in indices_by_target.values():
+        start, stop = _sample_window_bounds(len(indices), window=window)
+        selected_indices.update(indices[start:stop])
+
+    return tuple(
+        sample for index, sample in enumerate(samples) if index in selected_indices
+    )
+
+
+def _sample_window_bounds(
+    sample_count: int,
+    *,
+    window: CalibrationSampleWindow,
+) -> tuple[int, int]:
+    if sample_count <= 0:
+        return (0, 0)
+    window_size = max(1, sample_count // 3)
+    if window == "early":
+        return (0, window_size)
+    if window == "middle":
+        start = (sample_count - window_size) // 2
+        return (start, start + window_size)
+    if window == "late":
+        return (sample_count - window_size, sample_count)
+    return (0, sample_count)
 
 
 class CalibrationFlowLike(Protocol):
@@ -95,6 +139,7 @@ class CalibrationSession:
         timing_config: TimedCalibrationConfig | None = None,
         clock: Callable[[], float] | None = None,
         quality_filter: CalibrationQualityFilter | None = None,
+        calibration_sample_window: CalibrationSampleWindow = "all",
     ) -> None:
         if screen_width <= 0 or screen_height <= 0:
             msg = "screen dimensions must be positive"
@@ -109,6 +154,7 @@ class CalibrationSession:
         self.timing_config = timing_config
         self.clock = clock if clock is not None else monotonic
         self.quality_filter = quality_filter
+        self.calibration_sample_window: CalibrationSampleWindow = calibration_sample_window
         if self.timing_config is not None and self.quality_filter is None:
             self.quality_filter = CalibrationQualityFilter(
                 min_confidence=self.timing_config.min_confidence
@@ -268,8 +314,12 @@ class CalibrationSession:
         """Fit the calibration model from completed flow samples."""
 
         try:
-            self.fit_result = self.model.fit(
+            samples = select_calibration_samples_by_window(
                 self.flow.all_samples(),
+                window=self.calibration_sample_window,
+            )
+            self.fit_result = self.model.fit(
+                samples,
                 self.screen_width,
                 self.screen_height,
             )

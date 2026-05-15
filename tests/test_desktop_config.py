@@ -56,6 +56,30 @@ def test_demo_config_defaults_keep_camera_preview_available(
     assert config.preview_interval_ms == 33
     assert config.validation_grid_columns == 4
     assert config.validation_grid_rows == 3
+    assert config.calibration_sample_window == "all"
+
+
+def test_demo_config_parses_calibration_sample_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW", "late")
+
+    config = DemoConfig.from_environment()
+
+    assert config.calibration_sample_window == "late"
+
+
+def test_demo_config_rejects_invalid_calibration_sample_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW", "center")
+
+    with pytest.raises(ValueError, match="PUPIL_TRACKER_CALIBRATION_SAMPLE_WINDOW"):
+        DemoConfig.from_environment()
 
 
 def test_demo_config_parses_camera_id_and_preview_fps(
@@ -162,6 +186,7 @@ def test_create_main_window_applies_config_to_camera_and_timer(
         model_asset_path=None,
         validation_grid_columns=5,
         validation_grid_rows=4,
+        calibration_sample_window="late",
     )
 
     window = demo_app.create_main_window(config=config)
@@ -171,5 +196,6 @@ def test_create_main_window_applies_config_to_camera_and_timer(
     assert window.preview_timer.interval() == 40
     assert window.validation_session.grid_columns == 5
     assert window.validation_session.grid_rows == 4
+    assert window.calibration_session.calibration_sample_window == "late"
     window.stop_camera()
     qt_app.processEvents()

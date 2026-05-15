@@ -35,6 +35,7 @@ def create_main_window(*, config: DemoConfig | None = None) -> MainWindow:
         model_asset_path=resolved_config.model_asset_path,
         validation_grid_columns=resolved_config.validation_grid_columns,
         validation_grid_rows=resolved_config.validation_grid_rows,
+        calibration_sample_window=resolved_config.calibration_sample_window,
     )
 
 

@@ -21,7 +21,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from desktop_demo.calibration_session import CalibrationSession, CalibrationSessionState
+from desktop_demo.calibration_session import (
+    CalibrationSampleWindow,
+    CalibrationSession,
+    CalibrationSessionState,
+)
 from desktop_demo.gaze_runtime import GazeRuntime
 from desktop_demo.tracking_runtime import TrackingRuntime, TrackingStatus
 from desktop_demo.ui.annotations import annotate_observation
@@ -166,6 +170,7 @@ class MainWindow(QMainWindow):
         model_asset_path: Path | None = None,
         validation_grid_columns: int = 4,
         validation_grid_rows: int = 3,
+        calibration_sample_window: CalibrationSampleWindow = "all",
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pupil Tracker Demo")
@@ -191,6 +196,7 @@ class MainWindow(QMainWindow):
             raise ValueError(msg)
         self.validation_grid_columns = validation_grid_columns
         self.validation_grid_rows = validation_grid_rows
+        self.calibration_sample_window: CalibrationSampleWindow = calibration_sample_window
         self.telemetry_logger: JsonlLogger | None = None
         self._last_preview_qimage: QImage | None = None
 
@@ -304,6 +310,7 @@ class MainWindow(QMainWindow):
             screen_width=screen_width,
             screen_height=screen_height,
             timing_config=TimedCalibrationConfig(),
+            calibration_sample_window=self.calibration_sample_window,
         )
 
     def _create_default_validation_session(self) -> ValidationSession:

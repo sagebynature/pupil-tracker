@@ -136,6 +136,36 @@ def test_session_fits_model_after_all_targets_have_samples() -> None:
     )
 
 
+def test_session_fits_model_from_configured_late_sample_window() -> None:
+    from desktop_demo.calibration_session import CalibrationSession, CalibrationSessionState
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+
+    model = FakeCalibrationModel()
+    flow = CalibrationFlowState(samples_per_target=6)
+    session = CalibrationSession(
+        flow=flow,
+        model=model,
+        screen_width=1000,
+        screen_height=800,
+        calibration_sample_window="late",
+    )
+    session.start()
+
+    for target_index, _target in enumerate(flow.targets):
+        for sample_index in range(6):
+            timestamp = float(target_index * 10 + sample_index)
+            session.capture(valid_observation(timestamp=timestamp))
+
+    assert session.state is CalibrationSessionState.COMPLETE
+    assert len(flow.all_samples()) == 54
+    assert len(model.fit_samples) == 18
+    assert [sample.observation.timestamp for sample in model.fit_samples] == [
+        float(target_index * 10 + sample_index)
+        for target_index in range(9)
+        for sample_index in (4, 5)
+    ]
+
+
 def test_session_start_resets_previous_flow_samples() -> None:
     from desktop_demo.calibration_session import CalibrationSession, CalibrationSessionState
     from desktop_demo.ui.calibration_view import CalibrationFlowState
