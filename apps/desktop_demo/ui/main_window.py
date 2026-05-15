@@ -59,6 +59,7 @@ from pupil_tracker.platform import (
 )
 from pupil_tracker.telemetry import (
     JsonlLogger,
+    calibration_config_payload,
     calibration_event_payload,
     calibration_replay_sample_payload,
     calibration_target_quality_payload,
@@ -223,6 +224,9 @@ class MainWindow(QMainWindow):
         self.validation_grid_columns = validation_grid_columns
         self.validation_grid_rows = validation_grid_rows
         self.calibration_sample_window: CalibrationSampleWindow = calibration_sample_window
+        self.calibration_path_name = (
+            "default_9_point" if self._uses_default_calibration_session else "injected"
+        )
         self.posture_stability_max_delta = posture_stability_max_delta
         self._last_preview_qimage: QImage | None = None
 
@@ -453,6 +457,7 @@ class MainWindow(QMainWindow):
             return
         self.calibration_view.validation_button.setEnabled(False)
         self.calibration_session.start()
+        self._log_calibration_config_event()
         self._prepare_screen_overlay(self.calibration_target_overlay)
         self.calibration_target_overlay.show()
         self._refresh_calibration_view_status()
@@ -462,6 +467,7 @@ class MainWindow(QMainWindow):
         """Start the denser vertical calibration strategy for live accuracy checks."""
 
         self._start_linear_calibration_with_targets(
+            calibration_path="vertical_linear",
             targets=vertical_grid_pattern(),
             title="15-point linear vertical calibration",
             unavailable_message="Vertical calibration unavailable for injected sessions",
@@ -471,6 +477,7 @@ class MainWindow(QMainWindow):
         """Start the experimental edge-dense geometry calibration strategy."""
 
         self._start_linear_calibration_with_targets(
+            calibration_path="edge_dense",
             targets=edge_dense_calibration_pattern(),
             title="17-point edge-dense calibration",
             unavailable_message="Edge-dense calibration unavailable for injected sessions",
@@ -480,6 +487,7 @@ class MainWindow(QMainWindow):
         """Start the experimental top-left-focused geometry calibration strategy."""
 
         self._start_linear_calibration_with_targets(
+            calibration_path="top_left_focus",
             targets=top_left_focus_calibration_pattern(),
             title="25-point top-left focus calibration",
             unavailable_message="Top-left focus calibration unavailable for injected sessions",
@@ -488,6 +496,7 @@ class MainWindow(QMainWindow):
     def _start_linear_calibration_with_targets(
         self,
         *,
+        calibration_path: str,
         targets: Sequence[CalibrationTarget],
         title: str,
         unavailable_message: str,
@@ -496,6 +505,7 @@ class MainWindow(QMainWindow):
             self.debug_label.setText(unavailable_message)
             return
         flow = CalibrationFlowState(targets=targets)
+        self.calibration_path_name = calibration_path
         self.calibration_view.set_flow(flow, title=title)
         self.calibration_target_overlay.flow = flow
         screen_width, screen_height = self._screen_size()
@@ -511,6 +521,23 @@ class MainWindow(QMainWindow):
         )
         self.gaze_runtime = GazeRuntime(model=cast(Any, self.calibration_session.model))
         self.start_calibration()
+
+    def _log_calibration_config_event(self) -> None:
+        """Log scalar calibration configuration at the start of a run."""
+
+        self.log_telemetry_event(
+            "calibration_config",
+            calibration_config_payload(
+                calibration_path=self.calibration_path_name,
+                targets=self.calibration_view.flow.targets,
+                model_name=type(self.calibration_session.model).__name__,
+                calibration_sample_window=self.calibration_sample_window,
+                screen_width=self.calibration_session.screen_width,
+                screen_height=self.calibration_session.screen_height,
+                posture_stability_max_delta=self.posture_stability_max_delta,
+                posture_feature_indices=_HEAD_POSE_FEATURE_INDICES,
+            ),
+        )
 
     def start_validation(self) -> None:
         """Start post-calibration validation against known targets."""

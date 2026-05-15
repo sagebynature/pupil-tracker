@@ -2,6 +2,7 @@
 
 from pupil_tracker.telemetry.jsonl import (
     JsonlLogger,
+    calibration_config_payload,
     calibration_event_payload,
     calibration_replay_sample_payload,
     calibration_target_quality_payload,
@@ -16,6 +17,7 @@ from pupil_tracker.telemetry.jsonl import (
 
 __all__ = [
     "JsonlLogger",
+    "calibration_config_payload",
     "calibration_event_payload",
     "calibration_replay_sample_payload",
     "calibration_target_quality_payload",

@@ -29,6 +29,7 @@ from pupil_tracker.models import (
 )
 from pupil_tracker.telemetry import (
     JsonlLogger,
+    calibration_config_payload,
     calibration_event_payload,
     calibration_replay_sample_payload,
     calibration_target_quality_payload,
@@ -121,6 +122,40 @@ def test_replay_sample_payloads_are_scalar_only() -> None:
     assert "image" not in encoded
     assert "frame" not in encoded
     assert "landmark" not in encoded
+    assert "feature_vector" not in encoded
+
+
+def test_calibration_config_payload_records_active_scalar_config() -> None:
+    targets = (
+        CalibrationTarget(id="top0", x=0.1, y=0.1),
+        CalibrationTarget(id="bottom4", x=0.9, y=0.9),
+    )
+
+    payload = calibration_config_payload(
+        calibration_path="edge_dense",
+        targets=targets,
+        model_name="LinearRidgeCalibrationModel",
+        calibration_sample_window="all",
+        screen_width=5120.0,
+        screen_height=1440.0,
+        posture_stability_max_delta=0.05,
+        posture_feature_indices=(20, 21, 22),
+    )
+
+    assert payload == {
+        "calibration_path": "edge_dense",
+        "target_count": 2,
+        "target_ids": ["top0", "bottom4"],
+        "model_name": "LinearRidgeCalibrationModel",
+        "calibration_sample_window": "all",
+        "screen_width": 5120.0,
+        "screen_height": 1440.0,
+        "posture_stability_max_delta": 0.05,
+        "posture_feature_indices": [20, 21, 22],
+    }
+    encoded = json.dumps(payload)
+    assert "image" not in encoded
+    assert "frame" not in encoded
     assert "feature_vector" not in encoded
 
 

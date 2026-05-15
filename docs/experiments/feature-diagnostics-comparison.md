@@ -739,7 +739,7 @@ Interpretation:
 3. The original `v0` collapse improved but did not resolve; `v4` remained unusable, and `v1`/`v2` lost previously perfect grid accuracy.
 4. Because no capture samples were rejected, this is not strong evidence that the posture gate itself improved the model. It is better treated as another controlled edge-dense repeat run plus evidence that `0.08` is too permissive for the current head-pose proxy scale.
 
-Decision: do not promote the posture gate threshold or edge-dense calibration. Keep the gate opt-in. Next controlled posture experiment should use a stricter threshold, likely `0.05` first, or add telemetry that records the active gate configuration before asking for more manual runs.
+Decision: do not promote the posture gate threshold or edge-dense calibration. Keep the gate opt-in. Next controlled posture experiment should use a stricter threshold, likely `0.05` first; calibration starts now emit a scalar `calibration_config` event so the active path/window/model/threshold can be verified from the log before analysis.
 
 ## Decision Gate
 

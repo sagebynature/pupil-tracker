@@ -268,6 +268,46 @@ def test_live_calibration_logs_progress_without_frame_payload(
     qt_app.processEvents()
 
 
+def test_calibration_start_logs_active_config_before_samples(
+    qt_app: QApplication,
+    tmp_path: Path,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    log_path = tmp_path / "demo.jsonl"
+    window = MainWindow(
+        telemetry_path=log_path,
+        camera_factory=FakeCamera,
+        tracking_runtime=FakeTrackingRuntime(valid_observation()),
+        calibration_sample_window="late",
+        posture_stability_max_delta=0.05,
+        window_provider=lambda: (),
+    )
+    window.start_logging()
+
+    window.start_edge_dense_calibration()
+    window.stop_logging()
+
+    events = read_events(log_path)
+    assert events[0]["event_type"] == "calibration_config"
+    payload = cast(dict[str, object], events[0]["payload"])
+    assert payload["calibration_path"] == "edge_dense"
+    assert payload["target_count"] == 17
+    assert payload["model_name"] == "LinearRidgeCalibrationModel"
+    assert payload["calibration_sample_window"] == "late"
+    assert payload["posture_stability_max_delta"] == 0.05
+    assert payload["posture_feature_indices"] == [20, 21, 22]
+    assert payload["screen_width"]
+    assert payload["screen_height"]
+    target_ids = cast(list[str], payload["target_ids"])
+    assert target_ids[0] == "top0"
+    assert target_ids[-1] == "bottom4"
+    assert "image" not in json.dumps(events)
+    assert "feature_vector" not in json.dumps(events)
+    window.close()
+    qt_app.processEvents()
+
+
 def test_live_telemetry_is_noop_until_logging_enabled(
     qt_app: QApplication,
     tmp_path: Path,

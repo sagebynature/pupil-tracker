@@ -123,8 +123,8 @@ Use this path only when investigating the persistent top-left `v0` collapse afte
 
 Use this path only after geometry experiments move failures between targets instead of improving the full grid. It is not the default.
 
-- [ ] Launch with `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.08 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
-- [ ] Start logging before calibration so replay samples and validation metrics are captured.
+- [ ] Launch with `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
+- [ ] Start logging before calibration so replay samples, validation metrics, and the `calibration_config` event are captured.
 - [ ] Use the same calibration geometry as the comparison run; change only the posture gate variable.
 - [ ] Watch accepted/rejected counts during capture; high rejection counts mean head pose is moving relative to the first accepted sample for that target.
 - [ ] Confirm calibration still completes without excessive target retries.

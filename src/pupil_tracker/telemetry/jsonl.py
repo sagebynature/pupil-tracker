@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
@@ -91,6 +91,32 @@ def gaze_event_payload(sample: GazeSample, *, frame_image: Any | None = None) ->
         "confidence": sample.confidence,
         "valid": sample.valid,
         "region_id": sample.region_id,
+    }
+
+
+def calibration_config_payload(
+    *,
+    calibration_path: str,
+    targets: Sequence[CalibrationTarget],
+    model_name: str,
+    calibration_sample_window: str,
+    screen_width: float,
+    screen_height: float,
+    posture_stability_max_delta: float | None,
+    posture_feature_indices: Sequence[int],
+) -> dict[str, Any]:
+    """Serialize active calibration configuration for replay/run comparisons."""
+
+    return {
+        "calibration_path": calibration_path,
+        "target_count": len(targets),
+        "target_ids": [target.id for target in targets],
+        "model_name": model_name,
+        "calibration_sample_window": calibration_sample_window,
+        "screen_width": screen_width,
+        "screen_height": screen_height,
+        "posture_stability_max_delta": posture_stability_max_delta,
+        "posture_feature_indices": list(posture_feature_indices),
     }
 
 
