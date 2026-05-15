@@ -205,6 +205,14 @@ PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(p
 
 The posture gate compares each target's captured samples against the first accepted sample for that target using the head-pose proxy features: roll, yaw, and pitch. Samples whose selected feature drift exceeds the threshold are rejected before calibration storage. Calibration start logs a scalar `calibration_config` event with the active path, target count, model, sample window, screen size, posture threshold, and posture feature indices so repeat-run analysis can confirm the exact test condition. Keep this gate experimental until a logged validation run shows better 4x3 grid accuracy without moving failures to other targets.
 
+To test the opt-in posture-plus-face-context stability gate, launch with:
+
+```bash
+PUPIL_TRACKER_CONTEXT_STABILITY_MAX_DELTA=0.012 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo
+```
+
+Only one stability gate may be active per run. The context gate uses scalar face context plus posture indices `14,15,16,17,18,20,21,22` and logs the generic `stability_gate_name`, `stability_gate_max_delta`, and `stability_gate_feature_indices` fields in `calibration_config`. Keep it opt-in and judge it by decision-aware accepted/rejected counts plus validation grid accuracy; outside-envelope replay is a risk signal, not a promotion rule.
+
 Any future video/frame capture feature must be explicit opt-in and documented separately.
 
 ## Known MVP Limitations

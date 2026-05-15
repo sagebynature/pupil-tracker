@@ -54,6 +54,24 @@ class FakeTrackingRuntime:
         pass
 
 
+class FakeTrackingRuntimeSequence:
+    def __init__(self, observations: list[RawObservation]) -> None:
+        self.observations = observations
+        self.index = 0
+
+    def process(self, frame: Frame) -> TrackingStatus:
+        del frame
+        index = min(self.index, len(self.observations) - 1)
+        self.index += 1
+        return TrackingStatus(
+            observation=self.observations[index],
+            message="face tracked",
+        )
+
+    def close(self) -> None:
+        pass
+
+
 class FakeGazeRuntime:
     def __init__(self, sample: GazeSample) -> None:
         self.sample = sample
@@ -111,6 +129,18 @@ def valid_observation(timestamp: float = 1.0) -> RawObservation:
         confidence=0.8,
         face_bounds=Rect(x=1.0, y=2.0, width=10.0, height=12.0),
         feature_vector=(0.1, 0.2),
+    )
+
+
+def context_observation(*, timestamp: float, feature_14: float) -> RawObservation:
+    features = [0.1] * 23
+    features[14] = feature_14
+    return RawObservation(
+        timestamp=timestamp,
+        valid=True,
+        confidence=0.8,
+        face_bounds=Rect(x=1.0, y=2.0, width=10.0, height=12.0),
+        feature_vector=tuple(features),
     )
 
 
@@ -358,11 +388,129 @@ def test_calibration_start_logs_active_config_before_samples(
     assert payload["calibration_sample_window"] == "late"
     assert payload["posture_stability_max_delta"] == 0.05
     assert payload["posture_feature_indices"] == [20, 21, 22]
+    assert payload["stability_gate_name"] == "posture"
+    assert payload["stability_gate_max_delta"] == 0.05
+    assert payload["stability_gate_feature_indices"] == [20, 21, 22]
     assert payload["screen_width"]
     assert payload["screen_height"]
     target_ids = cast(list[str], payload["target_ids"])
     assert target_ids[0] == "top0"
     assert target_ids[-1] == "bottom4"
+    assert "image" not in json.dumps(events)
+    assert "feature_vector" not in json.dumps(events)
+    window.close()
+    qt_app.processEvents()
+
+
+def test_calibration_config_logs_context_stability_gate(
+    qt_app: QApplication,
+    tmp_path: Path,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    log_path = tmp_path / "demo.jsonl"
+    window = MainWindow(
+        telemetry_path=log_path,
+        camera_factory=FakeCamera,
+        tracking_runtime=FakeTrackingRuntime(valid_observation()),
+        context_stability_max_delta=0.012,
+        window_provider=lambda: (),
+    )
+    window.start_logging()
+
+    window.start_top_row_focus_calibration()
+    window.stop_logging()
+
+    events = read_events(log_path)
+    assert events[0]["event_type"] == "calibration_config"
+    payload = cast(dict[str, object], events[0]["payload"])
+    assert payload["stability_gate_name"] == "context"
+    assert payload["stability_gate_max_delta"] == 0.012
+    assert payload["stability_gate_feature_indices"] == [14, 15, 16, 17, 18, 20, 21, 22]
+    assert "image" not in json.dumps(events)
+    assert "feature_vector" not in json.dumps(events)
+    window.close()
+    qt_app.processEvents()
+
+
+def test_live_context_gate_logs_rejection_decision_and_target_counts(
+    qt_app: QApplication,
+    tmp_path: Path,
+) -> None:
+    from desktop_demo.calibration_session import CalibrationSession
+    from desktop_demo.ui.calibration_view import CalibrationFlowState
+    from desktop_demo.ui.main_window import MainWindow
+    from pupil_tracker.calibration import CalibrationQualityFilter, FeatureStabilityConfig
+
+    clock = FakeClock()
+    log_path = tmp_path / "demo.jsonl"
+    flow = CalibrationFlowState(samples_per_target=3)
+    session = CalibrationSession(
+        flow=flow,
+        model=FakeModel(),
+        screen_width=100.0,
+        screen_height=100.0,
+        timing_config=TimedCalibrationConfig(
+            settle_seconds=1.0,
+            capture_seconds=1.0,
+            min_samples_per_target=1,
+        ),
+        clock=clock,
+        quality_filter=CalibrationQualityFilter(
+            min_confidence=0.0,
+            stability_config=FeatureStabilityConfig(
+                feature_indices=(14, 15, 16, 17, 18, 20, 21, 22),
+                max_delta=0.012,
+            ),
+        ),
+    )
+    runtime = FakeTrackingRuntimeSequence(
+        [
+            context_observation(timestamp=1.0, feature_14=0.1),
+            context_observation(timestamp=1.1, feature_14=0.1),
+            context_observation(timestamp=1.2, feature_14=0.2),
+            context_observation(timestamp=1.3, feature_14=0.2),
+        ]
+    )
+    window = MainWindow(
+        telemetry_path=log_path,
+        camera_factory=FakeCamera,
+        tracking_runtime=runtime,
+        calibration_session=session,
+        window_provider=lambda: (),
+    )
+    window.start_camera()
+    window.start_logging()
+    window.start_calibration()
+
+    window.update_preview_frame()
+    clock.advance(1.0)
+    window.update_preview_frame()
+    clock.advance(0.1)
+    window.update_preview_frame()
+    clock.advance(1.0)
+    window.update_preview_frame()
+    window.stop_logging()
+
+    events = read_events(log_path)
+    replay_events = [
+        event for event in events if event["event_type"] == "calibration_replay_sample"
+    ]
+    rejected_payload = cast(dict[str, object], replay_events[2]["payload"])
+    assert rejected_payload["capture_phase"] == "capturing"
+    assert rejected_payload["sample_accepted"] is False
+    assert rejected_payload["decision_reason"] == "feature 14 drift 0.100 exceeds 0.012"
+    quality_event = next(
+        event for event in events if event["event_type"] == "calibration_target_quality"
+    )
+    assert quality_event["payload"] == {
+        "target_id": "r0c0",
+        "accepted_count": 1,
+        "rejected_count": 1,
+        "mean_confidence": 0.8,
+        "meets_min_samples": True,
+        "recommendation": "advance",
+    }
     assert "image" not in json.dumps(events)
     assert "feature_vector" not in json.dumps(events)
     window.close()

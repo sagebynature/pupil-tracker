@@ -38,6 +38,7 @@ def create_main_window(*, config: DemoConfig | None = None) -> MainWindow:
         calibration_sample_window=resolved_config.calibration_sample_window,
         gaze_focus_enabled=resolved_config.gaze_focus_enabled,
         posture_stability_max_delta=resolved_config.posture_stability_max_delta,
+        context_stability_max_delta=resolved_config.context_stability_max_delta,
         solvepnp_style_features_enabled=resolved_config.solvepnp_style_features_enabled,
     )
 

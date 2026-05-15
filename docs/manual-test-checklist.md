@@ -133,15 +133,18 @@ Use this path only when investigating paired top-row `v0`/`v1` collapse or later
 - [ ] Compare `v0` and `v1` grid accuracy and predicted-cell distributions against the latest top-left and edge-dense runs.
 - [ ] Check for moved regressions in `v3`/`v4`, mean X/Y error, and signed Y bias before changing defaults.
 
-## Experimental Posture Stability Gate
+## Experimental Posture/Context Stability Gates
 
-Use this path only after geometry experiments move failures between targets instead of improving the full grid. It is not the default. Current evidence shows `0.05` does not reject accepted capture samples, so do not spend additional manual runs on threshold-only posture gating unless a new hypothesis changes the gated features.
+Use these paths only after geometry experiments move failures between targets instead of improving the full grid. They are not defaults. Current evidence shows `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05` does not reject accepted capture samples, so do not spend additional manual runs on threshold-only posture gating unless a new hypothesis changes the gated features.
 
-- [ ] If explicitly re-running this experiment, launch with `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
+- [ ] If explicitly re-running the posture-only experiment, launch with `PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA=0.05 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
+- [ ] If explicitly testing the posture-plus-face-context experiment, launch with `PUPIL_TRACKER_CONTEXT_STABILITY_MAX_DELTA=0.012 PUPIL_TRACKER_MEDIAPIPE_MODEL=$(pwd)/models/face_landmarker.task make run-demo`.
+- [ ] Do not set both stability gate variables in the same run; the app rejects ambiguous dual-gate config.
 - [ ] Start logging before calibration so replay samples, validation metrics, and the `calibration_config` event are captured.
-- [ ] After the decision-aware telemetry build, confirm `calibration_replay_sample` events include `capture_phase`, `sample_accepted`, and `decision_reason` so settle/capture/rejected samples can be separated during analysis.
-- [ ] Use the same calibration geometry as the comparison run; change only the posture gate variable.
-- [ ] Watch accepted/rejected counts during capture; high rejection counts mean head pose is moving relative to the first accepted sample for that target.
+- [ ] Confirm `calibration_config` includes `stability_gate_name`, `stability_gate_max_delta`, and `stability_gate_feature_indices` so the active gate is auditable.
+- [ ] Confirm `calibration_replay_sample` events include `capture_phase`, `sample_accepted`, and `decision_reason` so settle/capture/rejected samples can be separated during analysis.
+- [ ] Use the same calibration geometry as the comparison run; change only the stability gate variable.
+- [ ] Watch accepted/rejected counts during capture; high rejection counts mean selected scalar features are moving relative to the first accepted sample for that target.
 - [ ] Confirm calibration still completes without excessive target retries.
 - [ ] Run validation immediately after calibration.
 - [ ] Compare 4x3 grid accuracy, per-target signed Y shifts, and target regressions against the same geometry without the gate before changing defaults.

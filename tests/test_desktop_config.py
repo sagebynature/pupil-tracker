@@ -50,6 +50,7 @@ def test_demo_config_defaults_keep_camera_preview_available(
     monkeypatch.delenv("PUPIL_TRACKER_GAZE_FOCUS_ENABLED", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_SOLVEPNP_STYLE_FEATURES", raising=False)
     monkeypatch.delenv("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA", raising=False)
+    monkeypatch.delenv("PUPIL_TRACKER_CONTEXT_STABILITY_MAX_DELTA", raising=False)
 
     config = DemoConfig.from_environment()
 
@@ -63,6 +64,7 @@ def test_demo_config_defaults_keep_camera_preview_available(
     assert config.gaze_focus_enabled is False
     assert config.solvepnp_style_features_enabled is False
     assert config.posture_stability_max_delta is None
+    assert config.context_stability_max_delta is None
 
 
 def test_demo_config_parses_posture_stability_max_delta(
@@ -85,6 +87,30 @@ def test_demo_config_rejects_invalid_posture_stability_max_delta(
     monkeypatch.setenv("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA", "0")
 
     with pytest.raises(ValueError, match="PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA"):
+        DemoConfig.from_environment()
+
+
+def test_demo_config_parses_context_stability_max_delta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_CONTEXT_STABILITY_MAX_DELTA", "0.012")
+
+    config = DemoConfig.from_environment()
+
+    assert config.context_stability_max_delta == pytest.approx(0.012)
+
+
+def test_demo_config_rejects_multiple_stability_gates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop_demo.config import DemoConfig
+
+    monkeypatch.setenv("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA", "0.08")
+    monkeypatch.setenv("PUPIL_TRACKER_CONTEXT_STABILITY_MAX_DELTA", "0.012")
+
+    with pytest.raises(ValueError, match="set only one stability gate"):
         DemoConfig.from_environment()
 
 
@@ -265,6 +291,7 @@ def test_create_main_window_applies_config_to_camera_and_timer(
         gaze_focus_enabled=True,
         solvepnp_style_features_enabled=True,
         posture_stability_max_delta=0.08,
+        context_stability_max_delta=None,
     )
 
     window = demo_app.create_main_window(config=config)
@@ -284,4 +311,26 @@ def test_create_main_window_applies_config_to_camera_and_timer(
     assert window.gaze_focus_enabled is True
     assert window.solvepnp_style_features_enabled is True
     window.stop_camera()
+    qt_app.processEvents()
+
+
+def test_create_main_window_applies_context_stability_gate_indices(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.app import create_main_window
+    from desktop_demo.config import DemoConfig
+
+    config = DemoConfig(
+        model_asset_path=None,
+        context_stability_max_delta=0.012,
+    )
+
+    window = create_main_window(config=config)
+
+    assert window.calibration_session.quality_filter is not None
+    stability_config = window.calibration_session.quality_filter.stability_config
+    assert stability_config is not None
+    assert stability_config.max_delta == pytest.approx(0.012)
+    assert stability_config.feature_indices == (14, 15, 16, 17, 18, 20, 21, 22)
+    window.close()
     qt_app.processEvents()

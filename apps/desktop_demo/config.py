@@ -89,6 +89,7 @@ class DemoConfig:
     gaze_focus_enabled: bool = False
     solvepnp_style_features_enabled: bool = False
     posture_stability_max_delta: float | None = None
+    context_stability_max_delta: float | None = None
 
     @classmethod
     def from_environment(cls) -> DemoConfig:
@@ -119,6 +120,16 @@ class DemoConfig:
             os.environ.get("PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA"),
             name="PUPIL_TRACKER_POSTURE_STABILITY_MAX_DELTA",
         )
+        context_stability_max_delta = _parse_optional_positive_float(
+            os.environ.get("PUPIL_TRACKER_CONTEXT_STABILITY_MAX_DELTA"),
+            name="PUPIL_TRACKER_CONTEXT_STABILITY_MAX_DELTA",
+        )
+        if (
+            posture_stability_max_delta is not None
+            and context_stability_max_delta is not None
+        ):
+            msg = "set only one stability gate max-delta environment variable"
+            raise ValueError(msg)
         model_asset_value = os.environ.get("PUPIL_TRACKER_MEDIAPIPE_MODEL")
         model_asset_path = Path(model_asset_value) if model_asset_value else None
         return cls(
@@ -131,6 +142,7 @@ class DemoConfig:
             gaze_focus_enabled=gaze_focus_enabled,
             solvepnp_style_features_enabled=solvepnp_style_features_enabled,
             posture_stability_max_delta=posture_stability_max_delta,
+            context_stability_max_delta=context_stability_max_delta,
         )
 
     @property

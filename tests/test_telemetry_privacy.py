@@ -140,6 +140,9 @@ def test_calibration_config_payload_records_active_scalar_config() -> None:
         screen_height=1440.0,
         posture_stability_max_delta=0.05,
         posture_feature_indices=(20, 21, 22),
+        stability_gate_name="context",
+        stability_gate_max_delta=0.012,
+        stability_gate_feature_indices=(14, 15, 16, 17, 18, 20, 21, 22),
     )
 
     assert payload == {
@@ -152,6 +155,9 @@ def test_calibration_config_payload_records_active_scalar_config() -> None:
         "screen_height": 1440.0,
         "posture_stability_max_delta": 0.05,
         "posture_feature_indices": [20, 21, 22],
+        "stability_gate_name": "context",
+        "stability_gate_max_delta": 0.012,
+        "stability_gate_feature_indices": [14, 15, 16, 17, 18, 20, 21, 22],
     }
     encoded = json.dumps(payload)
     assert "image" not in encoded

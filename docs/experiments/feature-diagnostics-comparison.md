@@ -1235,6 +1235,8 @@ Interpretation:
 
 Decision: keep envelope replay as scalar diagnostic evidence. Do not promote a live posture gate solely from this replay. If a controlled live gate is added later, it should log accepted/rejected counts and probably include posture plus face context features, with a conservative threshold validated by grid accuracy and per-target regressions.
 
+Implementation note: the app now has a separate opt-in `PUPIL_TRACKER_CONTEXT_STABILITY_MAX_DELTA` live gate for this controlled experiment. It uses scalar indices `14,15,16,17,18,20,21,22`, rejects ambiguous dual-gate config if the legacy posture gate is also set, and logs generic `stability_gate_*` fields plus per-sample decision telemetry. This is instrumentation for a future manual run, not a default-policy change.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:

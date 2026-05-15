@@ -104,9 +104,27 @@ def calibration_config_payload(
     screen_height: float,
     posture_stability_max_delta: float | None,
     posture_feature_indices: Sequence[int],
+    stability_gate_name: str | None = None,
+    stability_gate_max_delta: float | None = None,
+    stability_gate_feature_indices: Sequence[int] = (),
 ) -> dict[str, Any]:
     """Serialize active calibration configuration for replay/run comparisons."""
 
+    resolved_gate_name = stability_gate_name
+    if resolved_gate_name is None:
+        resolved_gate_name = "posture" if posture_stability_max_delta is not None else "none"
+    resolved_gate_max_delta = (
+        stability_gate_max_delta
+        if stability_gate_max_delta is not None
+        else posture_stability_max_delta
+    )
+    resolved_gate_indices = (
+        tuple(stability_gate_feature_indices)
+        if stability_gate_feature_indices
+        else tuple(posture_feature_indices)
+        if resolved_gate_name == "posture"
+        else ()
+    )
     return {
         "calibration_path": calibration_path,
         "target_count": len(targets),
@@ -117,6 +135,9 @@ def calibration_config_payload(
         "screen_height": screen_height,
         "posture_stability_max_delta": posture_stability_max_delta,
         "posture_feature_indices": list(posture_feature_indices),
+        "stability_gate_name": resolved_gate_name,
+        "stability_gate_max_delta": resolved_gate_max_delta,
+        "stability_gate_feature_indices": list(resolved_gate_indices),
     }
 
 

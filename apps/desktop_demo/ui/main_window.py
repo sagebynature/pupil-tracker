@@ -76,6 +76,7 @@ from pupil_tracker.tracking import Frame, MediaPipeTrackerBackend
 
 _LOGGER = get_logger("desktop_demo.ui")
 _HEAD_POSE_FEATURE_INDICES = (20, 21, 22)
+_CONTEXT_STABILITY_FEATURE_INDICES = (14, 15, 16, 17, 18, 20, 21, 22)
 
 
 class CameraSource(Protocol):
@@ -191,6 +192,7 @@ class MainWindow(QMainWindow):
         calibration_sample_window: CalibrationSampleWindow = "all",
         gaze_focus_enabled: bool = False,
         posture_stability_max_delta: float | None = None,
+        context_stability_max_delta: float | None = None,
         solvepnp_style_features_enabled: bool = False,
     ) -> None:
         super().__init__()
@@ -230,7 +232,11 @@ class MainWindow(QMainWindow):
         self.calibration_path_name = (
             "default_9_point" if self._uses_default_calibration_session else "injected"
         )
+        if posture_stability_max_delta is not None and context_stability_max_delta is not None:
+            msg = "set only one stability gate max delta"
+            raise ValueError(msg)
         self.posture_stability_max_delta = posture_stability_max_delta
+        self.context_stability_max_delta = context_stability_max_delta
         self._last_preview_qimage: QImage | None = None
 
         self.preview_label = QLabel("Camera preview stopped")
@@ -367,14 +373,17 @@ class MainWindow(QMainWindow):
         self,
         timing_config: TimedCalibrationConfig,
     ) -> CalibrationQualityFilter:
-        stability_config = (
-            FeatureStabilityConfig(
+        stability_config = None
+        if self.context_stability_max_delta is not None:
+            stability_config = FeatureStabilityConfig(
+                feature_indices=_CONTEXT_STABILITY_FEATURE_INDICES,
+                max_delta=self.context_stability_max_delta,
+            )
+        elif self.posture_stability_max_delta is not None:
+            stability_config = FeatureStabilityConfig(
                 feature_indices=_HEAD_POSE_FEATURE_INDICES,
                 max_delta=self.posture_stability_max_delta,
             )
-            if self.posture_stability_max_delta is not None
-            else None
-        )
         return CalibrationQualityFilter(
             min_confidence=timing_config.min_confidence,
             stability_config=stability_config,
@@ -544,6 +553,9 @@ class MainWindow(QMainWindow):
     def _log_calibration_config_event(self) -> None:
         """Log scalar calibration configuration at the start of a run."""
 
+        stability_gate_name, stability_gate_max_delta, stability_gate_indices = (
+            self._active_stability_gate_config()
+        )
         self.log_telemetry_event(
             "calibration_config",
             calibration_config_payload(
@@ -555,8 +567,22 @@ class MainWindow(QMainWindow):
                 screen_height=self.calibration_session.screen_height,
                 posture_stability_max_delta=self.posture_stability_max_delta,
                 posture_feature_indices=_HEAD_POSE_FEATURE_INDICES,
+                stability_gate_name=stability_gate_name,
+                stability_gate_max_delta=stability_gate_max_delta,
+                stability_gate_feature_indices=stability_gate_indices,
             ),
         )
+
+    def _active_stability_gate_config(self) -> tuple[str, float | None, tuple[int, ...]]:
+        if self.context_stability_max_delta is not None:
+            return (
+                "context",
+                self.context_stability_max_delta,
+                _CONTEXT_STABILITY_FEATURE_INDICES,
+            )
+        if self.posture_stability_max_delta is not None:
+            return ("posture", self.posture_stability_max_delta, _HEAD_POSE_FEATURE_INDICES)
+        return ("none", None, ())
 
     def start_validation(self) -> None:
         """Start post-calibration validation against known targets."""
