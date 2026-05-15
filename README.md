@@ -146,7 +146,7 @@ The app is privacy-conscious by default:
 - No frame/image arrays are written to telemetry by default.
 - JSONL telemetry is opt-in through Start Logging / Stop Logging controls.
 - Default demo telemetry path is under `metrics/`, which is ignored by git.
-- Telemetry serializers include scalar summaries such as timestamps, gaze coordinates, confidence, calibration target ids, sample counts, calibration quality, feature diagnostics, validation samples, validation metrics, and visible-window candidate metadata.
+- Telemetry serializers include scalar summaries such as timestamps, gaze coordinates, confidence, calibration target ids, sample counts, calibration quality, feature diagnostics, replayable scalar feature samples, validation samples, validation metrics, and visible-window candidate metadata.
 
 After a logged calibration run, inspect feature separability with:
 
@@ -155,6 +155,14 @@ uv run python tools/analyze_feature_diagnostics.py metrics/demo.jsonl
 ```
 
 Use the report to compare top/center/bottom feature deltas before adding new gaze features or tuning the calibration model.
+
+After a fresh logged calibration and validation run, compare calibration model variants offline with:
+
+```bash
+uv run python tools/evaluate_calibration_models.py metrics/demo.jsonl --screen-width 1512 --screen-height 982 --grid-columns 4 --grid-rows 3
+```
+
+Use the same screen dimensions as the manual run. The evaluator uses only `calibration_replay_sample` and `validation_replay_sample` scalar payloads, so it can compare candidate models without saving frames or re-running the camera session.
 
 Any future video/frame capture feature must be explicit opt-in and documented separately.
 
