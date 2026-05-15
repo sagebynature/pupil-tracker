@@ -326,6 +326,43 @@ Interpretation:
 
 Decision: keep weighted candidates in the replay evaluator for comparison, but do not expose a live weighting config yet and do not change live defaults.
 
+## Replay Vertical-Bias Correction Analysis
+
+Date: 2026-05-15
+
+The replay evaluator now includes evaluator-only vertical-bias correction candidates. The correction fits the base model first, predicts calibration samples, learns a one-dimensional linear residual correction from predicted normalized Y to Y residual, and applies that Y correction at prediction time while leaving X unchanged.
+
+Latest-run results, isolated to lines `48430`-`53453`:
+
+| Calibration Window | Best Overall Model | Overall Grid | Best Uncorrected/Unweighted | Uncorrected Grid | Best Weighted | Weighted Grid | Best Vertical-Bias | Vertical Grid |
+|---|---|---:|---|---:|---|---:|---|---:|
+| `all` | `poly2-alpha-10.0-vertical-bias-corrected` | 43.3% | `linear-alpha-0.1` | 40.1% | `linear-alpha-0.1-weight-vertical_edges` | 34.8% | `poly2-alpha-10.0-vertical-bias-corrected` | 43.3% |
+| `early` | `poly2-alpha-1.0-weight-screen_edges` | 44.5% | `linear-alpha-0.1` | 43.3% | `poly2-alpha-1.0-weight-screen_edges` | 44.5% | `linear-alpha-0.1-vertical-bias-corrected` | 38.9% |
+| `middle` | `poly2-alpha-10.0-vertical-bias-corrected` | 42.6% | `poly2-alpha-1.0-affine-corrected` | 29.8% | `poly2-alpha-1.0-weight-corners` | 31.7% | `poly2-alpha-10.0-vertical-bias-corrected` | 42.6% |
+| `late` | `poly2-alpha-10.0-vertical-bias-corrected` | 37.9% | `poly2-alpha-1.0` | 28.5% | `poly2-alpha-1.0-weight-vertical_edges` | 30.1% | `poly2-alpha-10.0-vertical-bias-corrected` | 37.9% |
+
+Best vertical-bias candidate was `all` + `poly2-alpha-10.0-vertical-bias-corrected` at `43.3%` grid accuracy. It improves over the uncorrected `all` baseline (`40.1%`) and reduces signed Y bias (`+81.53 px` vs `+147.64 px`), but it does not beat the best weighted replay result (`44.5%`) and remains retry-level.
+
+Validation residuals for `all` + `poly2-alpha-10.0-vertical-bias-corrected`:
+
+| Target | Mean Error | Signed X | Signed Y | Grid Accuracy |
+|---|---:|---:|---:|---:|
+| `v0` | 391.87 px | +59.28 px | +377.22 px | 0.0% |
+| `v4` | 281.16 px | -90.80 px | -159.17 px | 7.8% |
+| `v1` | 232.15 px | -58.35 px | +88.51 px | 50.8% |
+| `v2` | 162.52 px | +78.12 px | +101.48 px | 71.9% |
+| `v3` | 106.28 px | +84.40 px | -0.27 px | 85.9% |
+
+Interpretation:
+
+1. Vertical-bias correction helps some windows materially, especially `middle` (`29.8%` uncorrected best to `42.6%` vertical-bias corrected) and `late` (`28.5%` to `37.9%`).
+2. It does not solve the failure. Top-left `v0` remains `0.0%` grid accuracy with `+377.22 px` signed Y error, and bottom-right `v4` remains weak at `7.8%` grid accuracy.
+3. The correction reduces global signed Y bias but still leaves target-specific corner/edge failures. The remaining error is not a simple global Y bias.
+4. Do not promote vertical-bias correction to live behavior yet.
+5. Next evaluator slice should test geometry changes: denser top-row calibration, validation target placement, or per-band correction that can address top-left/top-right separately without overcorrecting bottom targets.
+
+Decision: keep vertical-bias correction candidates in the replay evaluator for comparison, but do not expose live config and do not change live defaults.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:
@@ -336,7 +373,7 @@ Keep the added features only if manual evidence improves at least one of these w
 4. practical `4x3` grid accuracy,
 5. red window-border usefulness.
 
-The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model until geometry or vertical-bias changes beat the current baseline in replay and then live validation.
+The first head-pose run cleared the first three gates partially and improved grid accuracy only slightly. The replay-enabled run improved live 4x3 grid accuracy to `40.0%`, but pixel error regressed to `256.20 px`. Grid-first offline replay showed corrected candidates can improve over their base models, and sample-window replay showed middle/late calibration samples could slightly beat the latest live grid result offline. The first late-window live validation did not confirm that signal: grid accuracy regressed to `30.0%`. Target residual analysis now shows vertical compression at top/bottom and edge/corner targets. Replay target weighting can slightly improve offline grid accuracy (`44.5%`) but leaves the top validation row unusable. Vertical-bias correction reduces global signed Y bias and reaches `43.3%` grid accuracy, but still leaves `v0` at `0.0%`. Keep the features and evaluator corrections for now; do not change the default sample window, add live weighting, or promote another live model until geometry/per-band changes beat the current baseline in replay and then live validation.
 
 If feature separability improves but validation remains compressed, investigate model form, target weighting, or calibration/validation sampling windows before adding heavier features.
 
