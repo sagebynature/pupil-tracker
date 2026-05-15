@@ -183,6 +183,9 @@ class CalibrationView(QWidget):
         self.top_left_focus_calibration_button = QPushButton(
             "Start Top-Left Focus Calibration"
         )
+        self.top_row_focus_calibration_button = QPushButton(
+            "Start Top-Row Focus Calibration"
+        )
         self.validation_button = QPushButton("Start Validation")
         self.validation_button.setEnabled(False)
 
@@ -195,6 +198,7 @@ class CalibrationView(QWidget):
         layout.addWidget(self.vertical_calibration_button)
         layout.addWidget(self.edge_dense_calibration_button)
         layout.addWidget(self.top_left_focus_calibration_button)
+        layout.addWidget(self.top_row_focus_calibration_button)
         layout.addWidget(self.validation_button)
         self.setLayout(layout)
         self.refresh()

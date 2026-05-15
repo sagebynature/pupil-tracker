@@ -268,6 +268,60 @@ def test_start_top_left_focus_calibration_uses_experimental_geometry(
     qt_app.processEvents()
 
 
+def test_start_top_row_focus_calibration_uses_experimental_geometry(
+    qt_app: QApplication,
+) -> None:
+    from desktop_demo.ui.main_window import MainWindow
+
+    window = MainWindow(
+        camera_factory=lambda: FakeCamera(fake_frame()),
+        tracking_runtime=FakeTrackingRuntime([valid_observation()]),
+    )
+
+    window.start_top_row_focus_calibration()
+
+    flow = window.calibration_view.flow
+    assert len(flow.targets) == 33
+    assert [target.id for target in flow.targets[0:23]] == [
+        "top0",
+        "top1",
+        "top2",
+        "top3",
+        "top4",
+        "tl_upper_left",
+        "tl_upper_mid",
+        "tl_upper_right",
+        "tl_center_left",
+        "tl_center",
+        "tl_center_right",
+        "tl_lower_left",
+        "tl_lower_mid",
+        "tl_lower_right",
+        "tr_upper_left",
+        "tr_upper_mid",
+        "tr_upper_right",
+        "tr_center_left",
+        "tr_center",
+        "tr_center_right",
+        "tr_lower_left",
+        "tr_lower_mid",
+        "tr_lower_right",
+    ]
+    assert flow.targets[-1].id == "bottom4"
+    assert window.calibration_session.flow is flow
+    assert window.calibration_view.flow is flow
+    assert window.calibration_target_overlay.flow is flow
+    assert isinstance(window.calibration_session.model, LinearRidgeCalibrationModel)
+    assert window.calibration_session.model.alpha == 1.0
+    assert window.calibration_view.title_label.text() == "33-point top-row focus calibration"
+    assert window.calibration_view.top_row_focus_calibration_button.text() == (
+        "Start Top-Row Focus Calibration"
+    )
+    assert window.calibration_target_overlay.isVisible()
+    window.close()
+    qt_app.processEvents()
+
+
 def test_start_calibration_shows_full_screen_target_overlay(qt_app: QApplication) -> None:
     from desktop_demo.calibration_session import CalibrationSession
     from desktop_demo.ui.main_window import MainWindow

@@ -47,6 +47,7 @@ from pupil_tracker.calibration import (
     edge_dense_calibration_pattern,
     summarize_feature_diagnostics,
     top_left_focus_calibration_pattern,
+    top_row_focus_calibration_pattern,
     validation_pattern,
     vertical_grid_pattern,
 )
@@ -301,6 +302,9 @@ class MainWindow(QMainWindow):
         self.calibration_view.top_left_focus_calibration_button.clicked.connect(
             self.start_top_left_focus_calibration
         )
+        self.calibration_view.top_row_focus_calibration_button.clicked.connect(
+            self.start_top_row_focus_calibration
+        )
         self.calibration_view.validation_button.clicked.connect(self.start_validation)
 
         controls = QHBoxLayout()
@@ -491,6 +495,16 @@ class MainWindow(QMainWindow):
             targets=top_left_focus_calibration_pattern(),
             title="25-point top-left focus calibration",
             unavailable_message="Top-left focus calibration unavailable for injected sessions",
+        )
+
+    def start_top_row_focus_calibration(self) -> None:
+        """Start the experimental top-row-focused geometry calibration strategy."""
+
+        self._start_linear_calibration_with_targets(
+            calibration_path="top_row_focus",
+            targets=top_row_focus_calibration_pattern(),
+            title="33-point top-row focus calibration",
+            unavailable_message="Top-row focus calibration unavailable for injected sessions",
         )
 
     def _start_linear_calibration_with_targets(

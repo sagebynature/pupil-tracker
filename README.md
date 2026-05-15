@@ -96,7 +96,7 @@ Expected manual path:
 
 1. Click Start Camera and confirm live preview.
 2. Center your face and confirm tracker annotations appear.
-3. Click Start Calibration and follow the 9 fullscreen targets. For replay-backed geometry experiments, use Start Edge-Dense Calibration for the 17-point edge/corner path or Start Top-Left Focus Calibration for the 25-point top-left `v0` collapse path.
+3. Click Start Calibration and follow the 9 fullscreen targets. For replay-backed geometry experiments, use Start Edge-Dense Calibration for the 17-point edge/corner path, Start Top-Left Focus Calibration for the 25-point top-left `v0` collapse path, or Start Top-Row Focus Calibration for the 33-point `v0`/`v1` top-row collapse path.
 4. Hold gaze through each target's Settle and Capture phases.
 5. Confirm calibration completes with fit metrics.
 6. Click Start Validation and follow the validation targets.
@@ -140,6 +140,8 @@ Calibration targets are shown fullscreen because the fitted model maps observati
 Start Edge-Dense Calibration is an experimental, non-default geometry check for top-row and edge/corner failures seen in replay analysis. It uses 17 targets: denser top/bottom edge rows, upper/lower quadrant points aligned with validation hot spots, and middle left/center/right anchors. Use it for a fresh logged manual validation run before changing live defaults.
 
 Start Top-Left Focus Calibration is a second experimental, non-default geometry check for the persistent `v0` top-left collapse. It uses 25 targets: the edge-dense broad anchors plus a 3x3 local cluster around the held-out top-left validation region `(0.25, 0.25)`. Use it only for logged repeat-run comparison against the latest edge-dense runs; do not treat one improved run as a default-change signal.
+
+Start Top-Row Focus Calibration is a third experimental, non-default geometry check for paired `v0`/`v1` top-row collapse. It uses 33 targets: broad edge anchors plus two 3x3 local clusters around the held-out top validation regions `(0.25, 0.25)` and `(0.75, 0.25)`. Use it only after top-left focus evidence shows top-row failures move laterally or affect both top validation targets; compare predicted-cell distributions for `v0`, `v1`, `v3`, and `v4` before changing defaults.
 
 For longer live checks, enable Show Heatmap and stare at fixed points. The heatmap should cluster where you hold your gaze. Use Clear Heatmap between trials.
 

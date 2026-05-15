@@ -30,7 +30,7 @@ PUPIL_TRACKER_MEDIAPIPE_MODEL=/absolute/path/to/face_landmarker.task make run-de
 
 - [ ] Confirm the app window opens with the title `Pupil Tracker Demo`.
 - [ ] Confirm the UI shows camera controls, calibration/validation controls, heatmap controls, the Gaze Focus toggle, debug text, and telemetry controls.
-- [ ] Confirm the UI includes the experimental Start Edge-Dense Calibration control for replay-backed geometry checks.
+- [ ] Confirm the UI includes the experimental Start Edge-Dense Calibration, Start Top-Left Focus Calibration, and Start Top-Row Focus Calibration controls for replay-backed geometry checks.
 - [ ] Confirm the camera is not active until Start Camera is clicked.
 - [ ] If the model variable is missing, confirm Start Calibration shows setup guidance mentioning `PUPIL_TRACKER_MEDIAPIPE_MODEL` instead of crashing.
 
@@ -118,6 +118,20 @@ Use this path only when investigating the persistent top-left `v0` collapse afte
 - [ ] Confirm calibration completes and enables Start Validation.
 - [ ] Run validation immediately after the top-left focus calibration.
 - [ ] Compare `v0` grid accuracy, predicted-cell distribution, `v3`/`v4` regressions, mean X/Y error, and signed Y bias against the latest edge-dense runs before changing defaults.
+
+## Experimental Top-Row Focus Calibration
+
+Use this path only when investigating paired top-row `v0`/`v1` collapse or lateral movement after top-left focus runs. It is not the default.
+
+- [ ] Start logging before calibration so replay samples and validation metrics are captured.
+- [ ] Click Start Top-Row Focus Calibration.
+- [ ] Confirm the target display covers the primary monitor.
+- [ ] Follow the 33 targets, including 3x3 local clusters around both top validation regions.
+- [ ] Confirm the title reads `33-point top-row focus calibration`.
+- [ ] Confirm calibration completes and enables Start Validation.
+- [ ] Run validation immediately after the top-row focus calibration.
+- [ ] Compare `v0` and `v1` grid accuracy and predicted-cell distributions against the latest top-left and edge-dense runs.
+- [ ] Check for moved regressions in `v3`/`v4`, mean X/Y error, and signed Y bias before changing defaults.
 
 ## Experimental Posture Stability Gate
 

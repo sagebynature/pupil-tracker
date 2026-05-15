@@ -14,6 +14,7 @@ from pupil_tracker.calibration.patterns import (
     edge_dense_calibration_pattern,
     grid_pattern,
     top_left_focus_calibration_pattern,
+    top_row_focus_calibration_pattern,
     vertical_grid_pattern,
 )
 from pupil_tracker.calibration.quality import (
@@ -62,6 +63,7 @@ __all__ = [
     "summarize_feature_diagnostics",
     "summarize_target_quality",
     "top_left_focus_calibration_pattern",
+    "top_row_focus_calibration_pattern",
     "validation_pattern",
     "vertical_grid_pattern",
 ]

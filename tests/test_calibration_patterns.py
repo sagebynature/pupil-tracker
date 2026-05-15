@@ -4,6 +4,7 @@ from pupil_tracker.calibration.patterns import (
     edge_dense_calibration_pattern,
     grid_pattern,
     top_left_focus_calibration_pattern,
+    top_row_focus_calibration_pattern,
     vertical_grid_pattern,
 )
 
@@ -186,6 +187,83 @@ def test_top_left_focus_calibration_pattern_adds_local_v0_geometry() -> None:
     ]
     assert targets[14].id == "upper_right"
     assert (targets[14].x, targets[14].y) == pytest.approx((0.75, 0.25))
+    assert [(target.x, target.y) for target in targets[-5:]] == [
+        pytest.approx((0.1, 0.9)),
+        pytest.approx((0.3, 0.9)),
+        pytest.approx((0.5, 0.9)),
+        pytest.approx((0.7, 0.9)),
+        pytest.approx((0.9, 0.9)),
+    ]
+
+
+def test_top_row_focus_calibration_pattern_adds_local_v0_and_v1_geometry() -> None:
+    targets = top_row_focus_calibration_pattern(margin=0.1)
+
+    assert len(targets) == 33
+    assert [target.id for target in targets] == [
+        "top0",
+        "top1",
+        "top2",
+        "top3",
+        "top4",
+        "tl_upper_left",
+        "tl_upper_mid",
+        "tl_upper_right",
+        "tl_center_left",
+        "tl_center",
+        "tl_center_right",
+        "tl_lower_left",
+        "tl_lower_mid",
+        "tl_lower_right",
+        "tr_upper_left",
+        "tr_upper_mid",
+        "tr_upper_right",
+        "tr_center_left",
+        "tr_center",
+        "tr_center_right",
+        "tr_lower_left",
+        "tr_lower_mid",
+        "tr_lower_right",
+        "mid_left",
+        "mid_center",
+        "mid_right",
+        "lower_left",
+        "lower_right",
+        "bottom0",
+        "bottom1",
+        "bottom2",
+        "bottom3",
+        "bottom4",
+    ]
+    assert [(target.x, target.y) for target in targets[5:14]] == [
+        pytest.approx((0.18, 0.18)),
+        pytest.approx((0.25, 0.18)),
+        pytest.approx((0.32, 0.18)),
+        pytest.approx((0.18, 0.25)),
+        pytest.approx((0.25, 0.25)),
+        pytest.approx((0.32, 0.25)),
+        pytest.approx((0.18, 0.32)),
+        pytest.approx((0.25, 0.32)),
+        pytest.approx((0.32, 0.32)),
+    ]
+    assert [(target.x, target.y) for target in targets[14:23]] == [
+        pytest.approx((0.68, 0.18)),
+        pytest.approx((0.75, 0.18)),
+        pytest.approx((0.82, 0.18)),
+        pytest.approx((0.68, 0.25)),
+        pytest.approx((0.75, 0.25)),
+        pytest.approx((0.82, 0.25)),
+        pytest.approx((0.68, 0.32)),
+        pytest.approx((0.75, 0.32)),
+        pytest.approx((0.82, 0.32)),
+    ]
+    assert [target.id for target in targets[23:28]] == [
+        "mid_left",
+        "mid_center",
+        "mid_right",
+        "lower_left",
+        "lower_right",
+    ]
     assert [(target.x, target.y) for target in targets[-5:]] == [
         pytest.approx((0.1, 0.9)),
         pytest.approx((0.3, 0.9)),
