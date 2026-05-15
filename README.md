@@ -50,7 +50,7 @@ This runs `uv sync --dev` and installs the locked runtime/dev environment.
 
 ## Distribution and Releases
 
-This package is macOS-first. The PyPI metadata advertises macOS support only, and the GitHub Actions release pipeline runs checks and builds on `macos-latest`.
+This package has a cross-platform Python library core plus a macOS-specific desktop demo/window-focus layer. The PyPI metadata advertises the library as OS-independent while marking the macOS demo support, and macOS-only PyObjC dependencies are guarded with a Darwin environment marker. The GitHub Actions release pipeline still runs checks and builds on `macos-latest` so the demo path is covered before publishing.
 
 Stable releases use SemVer tags:
 

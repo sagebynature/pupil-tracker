@@ -1,7 +1,7 @@
 [project]
 name = "pupil-tracker"
 version = "0.1.0"
-description = "macOS-first pupil and gaze tracking library with a PySide6 desktop demo."
+description = "Cross-platform pupil and gaze tracking library with a macOS-specific PySide6 desktop demo."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -11,6 +11,7 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
   "Operating System :: MacOS :: MacOS X",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
@@ -22,7 +23,7 @@ dependencies = [
   "mediapipe>=0.10",
   "PySide6>=6.6",
   "scikit-learn>=1.4",
-  "pyobjc-framework-quartz>=10.0",
+  "pyobjc-framework-quartz>=10.0; sys_platform == 'darwin'",
 ]
 
 [dependency-groups]

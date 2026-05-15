@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -40,6 +41,15 @@ def test_project_version_uses_stable_semver() -> None:
     assert major.isdecimal()
     assert minor.isdecimal()
     assert patch.isdecimal()
+
+
+def test_project_metadata_marks_core_library_cross_platform() -> None:
+    pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project = pyproject["project"]
+
+    assert "Operating System :: OS Independent" in project["classifiers"]
+    assert "Operating System :: MacOS :: MacOS X" in project["classifiers"]
+    assert "pyobjc-framework-quartz>=10.0; sys_platform == 'darwin'" in project["dependencies"]
 
 
 def test_release_tag_must_match_project_version(tmp_path: Path) -> None:
