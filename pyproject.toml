@@ -1,11 +1,21 @@
 [project]
 name = "pupil-tracker"
 version = "0.1.0"
-description = "Webcam-first pupil and gaze tracking library with a macOS desktop demo."
+description = "macOS-first pupil and gaze tracking library with a PySide6 desktop demo."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Sage Choi" }]
+keywords = ["gaze-tracking", "macos", "mediapipe", "pupil-tracking", "pyside6"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS :: MacOS X",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Human Machine Interfaces",
+]
 dependencies = [
   "numpy>=1.26",
   "opencv-python>=4.9",

@@ -48,6 +48,27 @@ make sync
 
 This runs `uv sync --dev` and installs the locked runtime/dev environment.
 
+## Distribution and Releases
+
+This package is macOS-first. The PyPI metadata advertises macOS support only, and the GitHub Actions release pipeline runs checks and builds on `macos-latest`.
+
+Stable releases use SemVer tags:
+
+```bash
+# Update [project].version in pyproject.toml first.
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow validates that the tag is `vMAJOR.MINOR.PATCH` and that it exactly matches `[project].version` before publishing. Publishing uses PyPI Trusted Publishing with the GitHub Actions environment named `pypi`; configure that environment as a trusted publisher in the PyPI project before pushing the first release tag.
+
+Local release checks:
+
+```bash
+make release-check
+make build
+```
+
 ## Verification
 
 Run all automated checks:

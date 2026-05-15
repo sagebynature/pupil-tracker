@@ -1,4 +1,4 @@
-.PHONY: help sync test typecheck lint format check download-model test-model run-demo clean
+.PHONY: help sync test typecheck lint format check build release-check download-model test-model run-demo clean
 
 UV ?= uv
 PYTHON ?= $(UV) run python
@@ -16,6 +16,8 @@ help:
 	@echo "  lint       Run ruff lint checks"
 	@echo "  format     Format Python files with ruff"
 	@echo "  check      Run lint, typecheck, and tests"
+	@echo "  build      Build source and wheel distributions"
+	@echo "  release-check  Validate SemVer release metadata"
 	@echo "  download-model  Download the MediaPipe FaceLandmarker model"
 	@echo "  run-demo   Launch the desktop demo"
 	@echo "  clean      Remove local caches"
@@ -36,6 +38,12 @@ format:
 	$(RUFF) format src apps tests tools
 
 check: lint typecheck test
+
+release-check:
+	$(PYTHON) tools/validate_release_version.py
+
+build: release-check
+	$(UV) build
 
 download-model: $(MODEL_DIR)/face_landmarker.task
 	@echo "Downloaded MediaPipe FaceLandmarker model: $<"
