@@ -1154,6 +1154,41 @@ Replay evaluation on this restored 23-feature run did not find a model promotion
 
 Decision: the opt-in gate worked technically, but the latest 23-feature run did not recover the earlier `52.1%` live result. The failure is now repeat-run instability/posture drift, not the solvePnP suffix alone. Do not add more calibration targets or promote asymmetric wrappers. The next implementation slice should add a scalar posture-normalized replay/evaluator path or explicit calibration/validation posture-drift diagnostic that compares per-target accepted samples against validation windows before any new live default.
 
+## Posture Validation Drift Comparison
+
+Date: 2026-05-15
+
+The posture/validation drift tool now supports repeated `--run` arguments and emits a compact target-outlier comparison before the full per-run scalar reports. This compares accepted calibration replay samples against the latest accepted validation metrics window for each target, then highlights targets below `50%` grid accuracy or hard `posture-drift-grid-collapse` flags.
+
+Command:
+
+```bash
+uv run python tools/analyze_posture_validation_drift.py metrics/demo.jsonl \
+  --run 115925:126151 \
+  --run 136697:145435 \
+  --screen-width 5120 \
+  --screen-height 1440 \
+  --grid-columns 4 \
+  --grid-rows 3
+```
+
+Compact outlier comparison:
+
+| Run | Target Outlier | Grid Accuracy | Predicted Cells | Flags | Top Context Drift |
+|---|---|---:|---|---|---|
+| `115925:126151` | `v0` | `0.0%` | `r1c0=15`, `r1c1=23` | `posture-drift-grid-collapse`, `posture-drift` | `21 yaw proxy -0.032506 (-5.03)` |
+| `115925:126151` | `v3` | `28.9%` | `r2c0=27`, `r2c1=11` | `posture-drift` | `22 pitch proxy +0.009262 (+3.74)` |
+| `136697:145435` | `v0` | `0.0%` | `r0c0=34`, `r1c0=4` | `posture-drift-grid-collapse`, `posture-drift` | `22 pitch proxy +0.021465 (+12.78)` |
+| `136697:145435` | `v3` | `0.0%` | `r1c1=38` | `posture-drift-grid-collapse`, `posture-drift` | `20 roll proxy +0.019044 (+4.50)` |
+| `136697:145435` | `v4` | `0.0%` | `r1c2=38` | `posture-drift-grid-collapse`, `posture-drift` | `22 pitch proxy +0.005174 (+2.68)` |
+
+Interpretation:
+
+1. The earlier best run already had posture-drift-aligned outliers at `v0` and `v3`; it was not uniformly stable despite the best aggregate `52.1%` grid score.
+2. The restored 23-feature run kept `v0` collapsed, drove `v3` from partial success to `0.0%`, and added a hard `v4` collapse.
+3. The top driver changes across runs (`v0` yaw to pitch, `v3` pitch to roll, `v4` pitch) point to repeat-run head/posture state shifts during validation rather than a missing feature-count or sample-count problem.
+4. Decision: keep this as diagnostic evidence only. Do not promote top-row focus, solvePnP-style suffixes, or residual wrappers. The next implementation slice should be a scalar posture-stability replay/gating experiment that asks whether accepted validation windows outside their calibration posture envelope can be identified before model/default changes.
+
 ## Decision Gate
 
 Keep the added features only if manual evidence improves at least one of these without a clear regression:

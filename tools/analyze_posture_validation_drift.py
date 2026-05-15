@@ -340,6 +340,65 @@ def format_posture_validation_drift_report(analysis: PostureValidationDriftAnaly
     return "\n".join(lines)
 
 
+def format_posture_validation_drift_run_comparison(
+    analyses: Sequence[PostureValidationDriftAnalysis],
+) -> str:
+    """Format a compact scalar comparison of target outliers across runs."""
+
+    if not analyses:
+        msg = "at least one posture validation drift analysis is required"
+        raise ValueError(msg)
+    lines = [
+        "## Posture/validation drift run comparison",
+        "",
+        "| Run | Lines | Target Outlier | Grid Accuracy | Predicted Cells | Flags | "
+        "Top Context Drift |",
+        "|---|---:|---|---:|---|---|---|",
+    ]
+    for analysis in analyses:
+        outliers = tuple(
+            target for target in analysis.targets.values() if _is_target_outlier(target)
+        )
+        if not outliers:
+            lines.append(
+                f"| {analysis.label} | {analysis.start_line}-{analysis.end_line} | "
+                "- | - | - | - | - |"
+            )
+            continue
+        for target in outliers:
+            lines.append(
+                "| "
+                f"{analysis.label} | "
+                f"{analysis.start_line}-{analysis.end_line} | "
+                f"{target.target_id} | "
+                f"{target.validation_grid_accuracy:.1%} | "
+                f"{_format_counts(target.predicted_cell_counts)} | "
+                f"{_format_flags(target.flags)} | "
+                f"{_format_top_context_drift(target.context_feature_deltas)} |"
+            )
+    return "\n".join(lines)
+
+
+def _is_target_outlier(target: TargetPostureValidationDrift) -> bool:
+    return (
+        "posture-drift-grid-collapse" in target.flags
+        or target.validation_grid_accuracy < 0.5
+    )
+
+
+def _format_top_context_drift(deltas: Sequence[FeatureDriftDelta]) -> str:
+    selected = next((delta for delta in deltas if _is_material_drift(delta)), None)
+    if selected is None and deltas:
+        selected = deltas[0]
+    if selected is None:
+        return "-"
+    return (
+        f"{selected.feature_index} {selected.feature_name} "
+        f"{selected.signed_delta:+.6f} "
+        f"({_format_normalized_delta(selected.normalized_delta)})"
+    )
+
+
 def _analyze_target_drift(
     *,
     target_id: str,
@@ -765,7 +824,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log_path", type=Path, help="Path to metrics/demo.jsonl")
-    parser.add_argument("--run", required=True, help="Inclusive run range START:END")
+    parser.add_argument(
+        "--run",
+        action="append",
+        required=True,
+        help="Inclusive run range START:END; repeat to compare runs",
+    )
     parser.add_argument("--screen-width", type=float, required=True)
     parser.add_argument("--screen-height", type=float, required=True)
     parser.add_argument("--grid-columns", type=int, default=4)
@@ -774,18 +838,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        analysis = analyze_posture_validation_drift_log(
-            args.log_path,
-            run_range=parse_run_range(args.run),
-            screen_width=args.screen_width,
-            screen_height=args.screen_height,
-            grid_columns=args.grid_columns,
-            grid_rows=args.grid_rows,
-            dominant_feature_count=args.dominant_feature_count,
+        analyses = tuple(
+            analyze_posture_validation_drift_log(
+                args.log_path,
+                run_range=parse_run_range(run),
+                screen_width=args.screen_width,
+                screen_height=args.screen_height,
+                grid_columns=args.grid_columns,
+                grid_rows=args.grid_rows,
+                dominant_feature_count=args.dominant_feature_count,
+            )
+            for run in args.run
         )
     except ValueError as error:
         _die(str(error))
-    print(format_posture_validation_drift_report(analysis))
+    if len(analyses) == 1:
+        print(format_posture_validation_drift_report(analyses[0]))
+        return 0
+    print(format_posture_validation_drift_run_comparison(analyses))
+    for analysis in analyses:
+        print()
+        print(format_posture_validation_drift_report(analysis))
     return 0
 
 

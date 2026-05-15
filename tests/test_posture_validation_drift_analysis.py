@@ -15,6 +15,7 @@ if str(TOOLS_ROOT) not in sys.path:
 from analyze_posture_validation_drift import (  # noqa: E402
     analyze_posture_validation_drift_log,
     format_posture_validation_drift_report,
+    format_posture_validation_drift_run_comparison,
     parse_run_range,
 )
 
@@ -349,3 +350,88 @@ def test_posture_validation_drift_report_is_scalar_and_flags_collapses(tmp_path:
     assert "pitch proxy" in report
     assert "MEDIA:" not in report
     assert "features=[" not in report
+
+
+def test_posture_validation_drift_run_comparison_lists_target_outliers(tmp_path: Path) -> None:
+    first_log_path = tmp_path / "first.jsonl"
+    second_log_path = tmp_path / "second.jsonl"
+    _write_jsonl(
+        first_log_path,
+        [
+            _calibration_replay_sample(
+                "cal_v0",
+                target_x=0.25,
+                target_y=0.25,
+                features=_features(overrides={22: 0.0}),
+            ),
+            _calibration_replay_sample(
+                "cal_v1",
+                target_x=0.75,
+                target_y=0.25,
+                features=_features(overrides={22: 0.0}),
+            ),
+            _validation_sample("v0", target_x=0.25, target_y=0.25, x=55.0, y=55.0),
+            _validation_replay_sample(
+                "v0",
+                target_x=0.25,
+                target_y=0.25,
+                features=_features(overrides={22: 0.03}),
+            ),
+            _validation_sample("v1", target_x=0.75, target_y=0.25, x=75.0, y=25.0),
+            _validation_replay_sample(
+                "v1", target_x=0.75, target_y=0.25, features=_features()
+            ),
+            _validation_metrics(sample_count=2, target_ids=("v0", "v1")),
+        ],
+    )
+    _write_jsonl(
+        second_log_path,
+        [
+            _calibration_replay_sample(
+                "cal_v0",
+                target_x=0.25,
+                target_y=0.25,
+                features=_features(overrides={22: 0.0}),
+            ),
+            _validation_sample("v0", target_x=0.25, target_y=0.25, x=25.0, y=25.0),
+            _validation_replay_sample(
+                "v0",
+                target_x=0.25,
+                target_y=0.25,
+                features=_features(overrides={22: 0.0}),
+            ),
+            _validation_metrics(sample_count=1, target_ids=("v0",)),
+        ],
+    )
+
+    comparison = format_posture_validation_drift_run_comparison(
+        (
+            analyze_posture_validation_drift_log(
+                first_log_path,
+                run_range=parse_run_range("1:7", label="first-run"),
+                screen_width=100.0,
+                screen_height=100.0,
+                grid_columns=4,
+                grid_rows=4,
+            ),
+            analyze_posture_validation_drift_log(
+                second_log_path,
+                run_range=parse_run_range("1:4", label="second-run"),
+                screen_width=100.0,
+                screen_height=100.0,
+                grid_columns=4,
+                grid_rows=4,
+            ),
+        )
+    )
+
+    assert "## Posture/validation drift run comparison" in comparison
+    assert (
+        "| first-run | 1-7 | v0 | 0.0% | r2c2=1 | "
+        "posture-drift-grid-collapse, posture-drift |"
+    ) in comparison
+    assert "22 pitch proxy +0.030000 (+inf)" in comparison
+    assert "| second-run | 1-4 | - | - | - | - | - |" in comparison
+    assert "| first-run | 1-7 | v1 |" not in comparison
+    assert "MEDIA:" not in comparison
+    assert "features=[" not in comparison
