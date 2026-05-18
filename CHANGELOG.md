@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.1 (2026-05-18)
+
+### Bug Fixes
+
+- Package desktop calibration demo
+  ([`517499a`](https://github.com/sagebynature/pupil-tracker/commit/517499ab22f4db10d95c2dfb79f19678156d3ef9))
+
+
 ## v1.0.0 (2026-05-15)
 
 ### Bug Fixes
