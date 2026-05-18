@@ -39,7 +39,7 @@ requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pupil_tracker"]
+packages = ["src/pupil_tracker", "apps/desktop_demo"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
